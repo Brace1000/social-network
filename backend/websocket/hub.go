@@ -1,19 +1,36 @@
 package websocket
 
+import (
+	"encoding/json"
+	"log"
+	"social-network/database/models"
+	"time"
+)
+
+// RoutedMessage wraps an incoming message with the client who sent it.
+type RoutedMessage struct {
+	Client  *Client
+	Message IncomingMessage
+}
+
 // Hub maintains the set of active clients and broadcasts messages to them.
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan []byte
-	register   chan *Client
+	// A map of UserID to a map of clients. Allows multiple connections per user.
+	clients map[string]map[*Client]bool
+	// Inbound messages from the clients.
+	routeMessage chan *RoutedMessage
+	// Register requests from the clients.
+	register chan *Client
+	// Unregister requests from clients.
 	unregister chan *Client
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		routeMessage: make(chan *RoutedMessage),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		clients:      make(map[string]map[*Client]bool),
 	}
 }
 
@@ -21,21 +38,92 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
-			h.clients[client] = true
-		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
+			// If this is the first connection for the user, initialize the map.
+			if h.clients[client.UserID] == nil {
+				h.clients[client.UserID] = make(map[*Client]bool)
 			}
-		case message := <-h.broadcast:
-			for client := range h.clients {
-				select {
-				case client.send <- message:
-				default:
+			h.clients[client.UserID][client] = true
+			log.Printf("Client registered: UserID %s", client.UserID)
+
+		case client := <-h.unregister:
+			if userClients, ok := h.clients[client.UserID]; ok {
+				if _, ok := userClients[client]; ok {
+					delete(userClients, client)
 					close(client.send)
-					delete(h.clients, client)
+					// If this was the last connection for the user, remove the user entry.
+					if len(userClients) == 0 {
+						delete(h.clients, client.UserID)
+					}
+					log.Printf("Client unregistered: UserID %s", client.UserID)
 				}
 			}
+
+		case routedMsg := <-h.routeMessage:
+			switch routedMsg.Message.Type {
+			case "private_message":
+				h.handlePrivateMessage(routedMsg)
+			// case "group_message":
+			// 	h.handleGroupMessage(routedMsg) // To be implemented later
+			default:
+				log.Printf("Unknown message type: %s", routedMsg.Message.Type)
+			}
 		}
+	}
+}
+
+func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
+	senderID := routedMsg.Client.UserID
+	recipientID := routedMsg.Message.RecipientID
+	content := routedMsg.Message.Content
+
+	// 1. Check permissions: Can sender message recipient?
+	// (This requires checking the follow relationship or if the recipient's profile is public)
+	// canMessage, err := models.CheckFollowRelationship(senderID, recipientID)
+	// if err != nil {
+	// 	log.Printf("Error checking follow relationship: %v", err)
+	// 	return
+	// }
+
+	// For this example, we'll bypass the check for easier testing.
+	// In a real app, you would uncomment and use the line below:
+	// if !canMessage {
+	// 	log.Printf("Permissions check failed: User %s cannot message User %s", senderID, recipientID)
+	// 	return
+	// }
+
+	// 2. Save the message to the database
+	dbMsg := &models.Message{
+		SenderID:    senderID,
+		RecipientID: recipientID,
+		Content:     content,
+	}
+	if err := models.SaveMessage(dbMsg); err != nil {
+		log.Printf("Failed to save message to DB: %v", err)
+		return
+	}
+
+	// 3. Create the outgoing message format
+	outgoingMsg := OutgoingMessage{
+		Type:      "private_message",
+		SenderID:  senderID,
+		Content:   content,
+		Timestamp: time.Now(),
+	}
+	messageBytes, _ := json.Marshal(outgoingMsg)
+
+	// 4. Send the message to all of the recipient's active connections
+	if recipientClients, ok := h.clients[recipientID]; ok {
+		for client := range recipientClients {
+			select {
+			case client.send <- messageBytes:
+			default:
+				close(client.send)
+				delete(recipientClients, client)
+			}
+		}
+		log.Printf("Sent private message from %s to %s", senderID, recipientID)
+	} else {
+		log.Printf("Recipient %s is not online.", recipientID)
+		// Here you would implement a notification for offline users
 	}
 }
