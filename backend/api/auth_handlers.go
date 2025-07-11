@@ -9,7 +9,14 @@ import (
 
 	"github.com/google/uuid"
 	"log"
+	"social-network/websocket"
 )
+var hub *websocket.Hub
+
+// InitUserHandlers initializes the handlers with the hub
+func InitUserHandlers(h *websocket.Hub) {
+	hub = h
+}
 
 // --- Request/Response Structs ---
 type RegisterRequest struct {
@@ -144,3 +151,45 @@ func CurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 		Nickname:  user.Nickname,
 	})
 }
+// FollowRequestHandler handles a user's request to follow another user.
+func FollowRequestHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the current user from the context (set by AuthMiddleware)
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 2. Get the ID of the user to be followed from the URL
+	vars := mux.Vars(r)
+	targetUserID, ok := vars["userId"]
+	if !ok {
+		http.Error(w, "User ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Get the target user's profile from the database
+	targetUser, err := models.GetUserByID(targetUserID)
+	if err != nil || targetUser == nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// 4. Check if the target user has a private profile
+	if !targetUser.IsPublic {
+		// 5. If private, send a notification
+		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
+		
+		// Use the hub to send the notification
+		go hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
+		
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
+	} else {
+		// If public, automatically follow them (logic to be added here)
+		// For now, just send a response.
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following " + targetUser.FirstName})
+	}
+}
+
