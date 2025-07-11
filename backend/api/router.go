@@ -12,6 +12,7 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	router := mux.NewRouter()
 
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+	InitUserHandlers(hub)
 
 	// Authentication routes (public)
 	apiRouter.HandleFunc("/register", RegisterHandler).Methods("POST", "OPTIONS")
@@ -20,6 +21,7 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 
 	// Route to check current user session (protected)
 	apiRouter.HandleFunc("/me", AuthMiddleware(CurrentUserHandler)).Methods("GET", "OPTIONS")
+	apiRouter.HandleFunc("/users/{userId}/follow", AuthMiddleware(FollowRequestHandler)).Methods("POST")
 
 	// WebSocket connection route
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
