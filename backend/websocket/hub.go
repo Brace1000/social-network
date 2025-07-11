@@ -127,3 +127,62 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 		// Here you would implement a notification for offline users
 	}
 }
+
+
+// SendNotification creates a notification, saves it to the DB, and pushes it to the user if they are online.
+func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
+	// 1. Create and save the notification to the database
+	notification := &models.Notification{
+		UserID:  userID,
+		ActorID: actorID,
+		Type:    notifType,
+		Message: message,
+		Read:    false, // New notifications are always unread
+	}
+
+	if err := models.CreateNotification(notification); err != nil {
+		log.Printf("Failed to save notification to DB: %v", err)
+		return // Don't send if we can't save it
+	}
+
+	// 2. Check if the target user is online
+	if userClients, ok := h.clients[userID]; ok {
+		// 3. If they are online, create the real-time message payload
+		wsNotif := NotificationMessage{
+			Type: "notification",
+			Payload: struct {
+				ID        string `json:"id"`
+				Message   string `json:"message"`
+				ActorID   string `json:"actorId,omitempty"`
+				NotifType string `json:"notifType"`
+				Read      bool   `json:"read"`
+			}{
+				ID:        notification.ID,
+				Message:   notification.Message,
+				ActorID:   notification.ActorID,
+				NotifType: notification.Type,
+				Read:      notification.Read,
+			},
+			Timestamp: time.Now(),
+		}
+
+		messageBytes, err := json.Marshal(wsNotif)
+		if err != nil {
+			log.Printf("Failed to marshal notification: %v", err)
+			return
+		}
+
+		// 4. Send the notification to all of that user's active connections
+		for client := range userClients {
+			select {
+			case client.send <- messageBytes:
+			default:
+				close(client.send)
+				delete(userClients, client)
+			}
+		}
+		log.Printf("Sent real-time notification of type '%s' to user %s", notifType, userID)
+	} else {
+		log.Printf("User %s is not online. Notification saved to DB for later retrieval.", userID)
+	}
+}
