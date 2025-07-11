@@ -16,3 +16,14 @@ type OutgoingMessage struct {
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
 }
+type NotificationMessage struct {
+	Type      string    `json:"type"` // "notification"
+	Payload   struct {
+		ID        string `json:"id"`
+		Message   string `json:"message"`
+		ActorID   string `json:"actorId,omitempty"`
+		NotifType string `json:"notifType"` // "follow_request", etc.
+		Read      bool   `json:"read"`
+	} `json:"payload"`
+	Timestamp time.Time `json:"timestamp"`
+}
