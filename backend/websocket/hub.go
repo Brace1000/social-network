@@ -124,7 +124,7 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 		log.Printf("Sent private message from %s to %s", senderID, recipientID)
 	} else {
 		log.Printf("Recipient %s is not online.", recipientID)
-		// Here you would implement a notification for offline users
+		
 	}
 }
 
@@ -144,6 +144,7 @@ func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
 		log.Printf("Failed to save notification to DB: %v", err)
 		return // Don't send if we can't save it
 	}
+	
 
 	// 2. Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
