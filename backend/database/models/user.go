@@ -115,3 +115,14 @@ func GetUserByID(id string) (*User, error) {
 
 	return user, nil
 }
+// SetUserProfilePrivacy updates the is_public flag for a given user.
+func SetUserProfilePrivacy(userID string, isPublic bool) error {
+    stmt, err := database.DB.Prepare("UPDATE users SET is_public = ? WHERE id = ?")
+    if err != nil {
+        return err
+    }
+    defer stmt.Close()
+
+    _, err = stmt.Exec(isPublic, userID)
+    return err
+}
