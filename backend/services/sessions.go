@@ -7,6 +7,8 @@ import (
 	"social-network/database/models"
 
 	"github.com/google/uuid"
+	"io"
+	"os"
 )
 
 type contextKey string
@@ -85,4 +87,23 @@ func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Path:     "/",
 	})
+}
+
+// SaveUploadedFile saves an uploaded file to the given path and returns the file handle.
+func SaveUploadedFile(src io.Reader, dstPath string) (*os.File, error) {
+	// Ensure the directory exists
+	dir := "./uploads/avatars"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+	f, err := os.Create(dstPath)
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(f, src)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
 }

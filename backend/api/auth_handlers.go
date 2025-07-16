@@ -2,16 +2,28 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
-
 	"social-network/database/models"
 	"social-network/services"
+	"social-network/websocket"
 
 	"github.com/google/uuid"
-	"log"
+	"github.com/gorilla/mux"
 )
 
-// --- Request/Response Structs ---
+// UserHandler holds dependencies for user-related handlers, like the WebSocket hub.
+type UserHandler struct {
+	hub *websocket.Hub
+}
+
+// NewUserHandlers creates a new UserHandler with its dependencies.
+func NewUserHandlers(h *websocket.Hub) *UserHandler {
+	return &UserHandler{hub: h}
+}
+
+// --- Request/Response Structs remain the same ---
 type RegisterRequest struct {
 	FirstName   string `json:"firstName"`
 	LastName    string `json:"lastName"`
@@ -21,13 +33,12 @@ type RegisterRequest struct {
 	DateOfBirth string `json:"dateOfBirth"`
 	AboutMe     string `json:"aboutMe,omitempty"`
 }
-
+// ... (LoginRequest and UserResponse are the same as before)
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-// UserResponse is a safe structure to send user data to the client (no password hash).
 type UserResponse struct {
 	ID        string `json:"id"`
 	FirstName string `json:"firstName"`
@@ -36,8 +47,11 @@ type UserResponse struct {
 	Nickname  string `json:"nickname,omitempty"`
 }
 
-// --- Handlers ---
-func RegisterHandler(w http.ResponseWriter, r *http.Request) {
+
+// --- Handlers are now methods on the UserHandler struct ---
+
+func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+    // This code remains exactly the same as before.
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -74,7 +88,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := models.CreateUser(user); err != nil {
-		log.Printf("ERROR: Failed to create user in database: %v", err) // <-- ADD THIS LINE
+		log.Printf("ERROR: Failed to create user in database: %v", err)
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
@@ -84,7 +98,8 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
+    // This code remains exactly the same as before.
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -120,15 +135,14 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func LogoutHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	services.ClearSessionCookie(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Logged out successfully"})
 }
 
-// CurrentUserHandler gets the currently logged-in user from the context (set by AuthMiddleware).
-func CurrentUserHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) CurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "Could not retrieve user from context", http.StatusInternalServerError)
@@ -143,4 +157,68 @@ func CurrentUserHandler(w http.ResponseWriter, r *http.Request) {
 		Email:     user.Email,
 		Nickname:  user.Nickname,
 	})
+}
+
+func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Request) {
+    
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	targetUserID, ok := vars["userId"]
+	if !ok {
+		http.Error(w, "User ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	targetUser, err := models.GetUserByID(targetUserID)
+	if err != nil || targetUser == nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if !targetUser.IsPublic {
+		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
+		go h.hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
+	} else {
+		// Automatically follow logic here
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following " + targetUser.FirstName})
+	}
+}
+// MakeProfilePrivateHandler is a TEMPORARY handler for debugging purposes.
+// It changes a user's profile to private.
+func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.Request) {
+    _, ok := r.Context().Value(services.UserContextKey).(*models.User)
+    if !ok {
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    // Get the user ID from the URL path
+    vars := mux.Vars(r)
+    targetUserID, ok := vars["userId"]
+    if !ok {
+        http.Error(w, "User ID not provided", http.StatusBadRequest)
+        return
+    }
+
+    // Perform the database update
+    err := models.SetUserProfilePrivacy(targetUserID, false) // false means private
+    if err != nil {
+        log.Printf("Error updating user privacy: %v", err)
+        http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+        return
+    }
+
+    log.Printf("User %s profile has been set to PRIVATE for testing.", targetUserID)
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{
+        "message": fmt.Sprintf("User %s profile is now private", targetUserID),
+    })
 }
