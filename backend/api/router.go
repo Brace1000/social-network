@@ -23,6 +23,11 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	apiRouter.HandleFunc("/me", AuthMiddleware(userHandlers.CurrentUserHandler)).Methods("GET", "OPTIONS")
 	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.FollowRequestHandler)).Methods("POST", "OPTIONS")
 
+	// --- Profile Endpoints ---
+	apiRouter.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
+	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
+	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
+
 	// --- WebSocket Route ---
 	// Authentication is handled inside the WebSocket handler itself
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
