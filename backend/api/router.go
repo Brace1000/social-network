@@ -21,7 +21,13 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 
 	// --- Protected Routes (require a valid session cookie) ---
 	apiRouter.HandleFunc("/me", AuthMiddleware(userHandlers.CurrentUserHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.FollowRequestHandler)).Methods("POST", "OPTIONS")
+	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.SendFollowRequestHandler)).Methods("POST", "OPTIONS")
+	apiRouter.HandleFunc("/follow/{userId}/accept", AuthMiddleware(userHandlers.AcceptFollowRequestHandler)).Methods("POST", "OPTIONS")
+	apiRouter.HandleFunc("/follow/{userId}/decline", AuthMiddleware(userHandlers.DeclineFollowRequestHandler)).Methods("POST", "OPTIONS")
+	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.UnfollowHandler)).Methods("DELETE", "OPTIONS")
+	apiRouter.HandleFunc("/followers/{userId}", userHandlers.ListFollowersHandler).Methods("GET", "OPTIONS")
+	apiRouter.HandleFunc("/following/{userId}", userHandlers.ListFollowingHandler).Methods("GET", "OPTIONS")
+	apiRouter.HandleFunc("/follow-requests", AuthMiddleware(userHandlers.ListPendingFollowRequestsHandler)).Methods("GET", "OPTIONS")
 
 	// --- Profile Endpoints ---
 	apiRouter.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
