@@ -33,6 +33,16 @@ func (h *UserHandler) SendFollowRequestHandler(w http.ResponseWriter, r *http.Re
 			http.Error(w, "Failed to follow user", http.StatusInternalServerError)
 			return
 		}
+		// Notify target user of new follower
+		msg := actor.FirstName + " " + actor.LastName + " is now following you."
+		notif := &models.Notification{
+			UserID:  targetUserID,
+			ActorID: actor.ID,
+			Type:    "follow_accepted",
+			Message: msg,
+			Read:    false,
+		}
+		_ = models.CreateNotification(notif)
 		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following this user."})
 		return
 	}
@@ -42,6 +52,16 @@ func (h *UserHandler) SendFollowRequestHandler(w http.ResponseWriter, r *http.Re
 		http.Error(w, "Failed to send follow request", http.StatusInternalServerError)
 		return
 	}
+	// Notify target user of follow request
+	msg := actor.FirstName + " " + actor.LastName + " wants to follow you."
+	notif := &models.Notification{
+		UserID:  targetUserID,
+		ActorID: actor.ID,
+		Type:    "follow_request",
+		Message: msg,
+		Read:    false,
+	}
+	_ = models.CreateNotification(notif)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
 }
 
@@ -63,6 +83,16 @@ func (h *UserHandler) AcceptFollowRequestHandler(w http.ResponseWriter, r *http.
 		http.Error(w, "Failed to accept follow request", http.StatusInternalServerError)
 		return
 	}
+	// Notify requester that their request was accepted
+	msg := actor.FirstName + " " + actor.LastName + " accepted your follow request."
+	notif := &models.Notification{
+		UserID:  requesterID,
+		ActorID: actor.ID,
+		Type:    "follow_accepted",
+		Message: msg,
+		Read:    false,
+	}
+	_ = models.CreateNotification(notif)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request accepted."})
 }
 
@@ -84,6 +114,16 @@ func (h *UserHandler) DeclineFollowRequestHandler(w http.ResponseWriter, r *http
 		http.Error(w, "Failed to decline follow request", http.StatusInternalServerError)
 		return
 	}
+	// Optionally notify requester of decline
+	msg := actor.FirstName + " " + actor.LastName + " declined your follow request."
+	notif := &models.Notification{
+		UserID:  requesterID,
+		ActorID: actor.ID,
+		Type:    "follow_declined",
+		Message: msg,
+		Read:    false,
+	}
+	_ = models.CreateNotification(notif)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request declined."})
 }
 
