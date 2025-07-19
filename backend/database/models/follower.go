@@ -2,7 +2,6 @@ package models
 
 import (
 	"social-network/database"
-	"database/sql"
 	"github.com/google/uuid"
 )
 
@@ -36,8 +35,20 @@ func CheckFollowRelationship(user1ID, user2ID string) (bool, error) {
 
 // CreateFollowRequest creates a new follow request (pending) from requester to target.
 func CreateFollowRequest(requesterID, targetID string) error {
+	// Check for existing pending request
+	var count int
+	err := database.DB.QueryRow(
+		`SELECT COUNT(1) FROM follow_requests WHERE requester_id = ? AND target_id = ? AND status = 'pending'`,
+		requesterID, targetID,
+	).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil // Already exists, do not duplicate
+	}
 	id := uuid.NewString()
-	_, err := database.DB.Exec(
+	_, err = database.DB.Exec(
 		`INSERT INTO follow_requests (id, requester_id, target_id, status) VALUES (?, ?, ?, 'pending')`,
 		id, requesterID, targetID,
 	)
