@@ -25,7 +25,7 @@ func main() {
 	router := api.SetupRouter(hub)
 
 	// Start the HTTP server
-	log.Println("Server starting on port :8080")
+	log.Println("Server started at http://localhost :8080")
 	if err := http.ListenAndServe(":8080", router); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}

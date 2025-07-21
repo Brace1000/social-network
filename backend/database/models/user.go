@@ -126,3 +126,25 @@ func SetUserProfilePrivacy(userID string, isPublic bool) error {
     _, err = stmt.Exec(isPublic, userID)
     return err
 }
+
+// UpdateUserProfile updates editable fields of a user in the database.
+func UpdateUserProfile(user *User) error {
+	stmt, err := database.DB.Prepare(`
+		UPDATE users SET first_name = ?, last_name = ?, nickname = ?, about_me = ?, is_public = ?, avatar_path = ? WHERE id = ?
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		user.FirstName,
+		user.LastName,
+		user.Nickname,
+		user.AboutMe,
+		user.IsPublic,
+		user.AvatarPath,
+		user.ID,
+	)
+	return err
+}
