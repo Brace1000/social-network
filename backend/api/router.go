@@ -7,7 +7,7 @@ import (
 )
 
 // SetupRouter configures all the API routes for the application.
-func SetupRouter(hub *websocket.Hub) *mux.Router {
+func SetupRouter(hub *websocket.Hub) http.Handler {
 	// This is cleaner than using a global variable.
 	userHandlers := NewUserHandlers(hub)
 
@@ -22,7 +22,6 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	// --- Protected Routes (require a valid session cookie) ---
 	apiRouter.HandleFunc("/me", AuthMiddleware(userHandlers.CurrentUserHandler)).Methods("GET", "OPTIONS")
 	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.FollowRequestHandler)).Methods("POST", "OPTIONS")
-
 	// --- WebSocket Route ---
 	// Authentication is handled inside the WebSocket handler itself
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -30,5 +29,6 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	})
 	apiRouter.HandleFunc("/make-private/{userId}", AuthMiddleware(userHandlers.MakeProfilePrivateHandler)).Methods("POST", "OPTIONS")
 
-	return router
+	// Wrap the router with CORS middleware before returning
+	return CORSMiddleware(router)
 }
