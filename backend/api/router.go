@@ -36,14 +36,6 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
 	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
 
-<<<<<<< HEAD
-	// --- Profile Endpoints ---
-	apiRouter.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
-	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
-
-=======
->>>>>>> origin/frontend
 	
 	// --- WebSocket Route ---
 	// Authentication is handled inside the WebSocket handler itself
