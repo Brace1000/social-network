@@ -9,7 +9,7 @@ import (
 )
 
 // SetupRouter configures all the API routes for the application.
-func SetupRouter(hub *websocket.Hub) *mux.Router {
+func SetupRouter(hub *websocket.Hub) http.Handler {
 	// This is cleaner than using a global variable.
 	userHandlers := NewUserHandlers(hub)
 
@@ -36,11 +36,14 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
 	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
 
+<<<<<<< HEAD
 	// --- Profile Endpoints ---
 	apiRouter.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
 	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
 	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
 
+=======
+>>>>>>> origin/frontend
 	
 	// --- WebSocket Route ---
 	// Authentication is handled inside the WebSocket handler itself
@@ -49,5 +52,6 @@ func SetupRouter(hub *websocket.Hub) *mux.Router {
 	})
 	apiRouter.HandleFunc("/make-private/{userId}", AuthMiddleware(userHandlers.MakeProfilePrivateHandler)).Methods("POST", "OPTIONS")
 
-	return router
+	// Wrap the router with CORS middleware before returning
+	return CORSMiddleware(router)
 }
