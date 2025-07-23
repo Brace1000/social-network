@@ -2,16 +2,17 @@ package api
 
 import (
 	"net/http"
-	"social-network/websocket" 
-	
+
+	"social-network/websocket"
 
 	"github.com/gorilla/mux"
 )
 
 // SetupRouter configures all the API routes for the application.
 func SetupRouter(hub *websocket.Hub) http.Handler {
-	// This is cleaner than using a global variable.
+	// Instantiate all handler groups
 	userHandlers := NewUserHandlers(hub)
+	postHandlers := NewPostHandlers()
 
 	router := mux.NewRouter()
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
@@ -21,28 +22,35 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	apiRouter.HandleFunc("/login", userHandlers.LoginHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/logout", userHandlers.LogoutHandler).Methods("POST", "OPTIONS")
 
-	// --- Protected Routes (require a valid session cookie) ---
-	apiRouter.HandleFunc("/me", AuthMiddleware(userHandlers.CurrentUserHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.SendFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}/accept", AuthMiddleware(userHandlers.AcceptFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}/decline", AuthMiddleware(userHandlers.DeclineFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.UnfollowHandler)).Methods("DELETE", "OPTIONS")
-	apiRouter.HandleFunc("/followers/{userId}", userHandlers.ListFollowersHandler).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/following/{userId}", userHandlers.ListFollowingHandler).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow-requests", AuthMiddleware(userHandlers.ListPendingFollowRequestsHandler)).Methods("GET", "OPTIONS")
-
-	// --- Profile Endpoints ---
-	apiRouter.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
-	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
-
-	
 	// --- WebSocket Route ---
 	// Authentication is handled inside the WebSocket handler itself
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(hub, w, r)
 	})
-	apiRouter.HandleFunc("/make-private/{userId}", AuthMiddleware(userHandlers.MakeProfilePrivateHandler)).Methods("POST", "OPTIONS")
+
+	// --- Protected Routes (require a valid session cookie via AuthMiddleware) ---
+	auth := apiRouter.PathPrefix("").Subrouter()
+
+	// --- User & Follower Routes ---
+	auth.HandleFunc("/me", userHandlers.CurrentUserHandler).Methods("GET")
+	auth.HandleFunc("/follow/{userId}", userHandlers.SendFollowRequestHandler).Methods("POST")
+	auth.HandleFunc("/follow/{userId}/accept", userHandlers.AcceptFollowRequestHandler).Methods("POST")
+	auth.HandleFunc("/follow/{userId}/decline", userHandlers.DeclineFollowRequestHandler).Methods("POST")
+	auth.HandleFunc("/unfollow/{userId}", userHandlers.UnfollowHandler).Methods("POST") // Using POST for consistency
+	auth.HandleFunc("/followers/{userId}", userHandlers.ListFollowersHandler).Methods("GET")
+	auth.HandleFunc("/following/{userId}", userHandlers.ListFollowingHandler).Methods("GET")
+	auth.HandleFunc("/follow-requests", userHandlers.ListPendingFollowRequestsHandler).Methods("GET")
+
+	// --- Profile Routes ---
+	auth.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET")
+	auth.HandleFunc("/profile", userHandlers.UpdateProfileHandler).Methods("PUT")
+	auth.HandleFunc("/profile/avatar", userHandlers.UploadAvatarHandler).Methods("POST")
+	auth.HandleFunc("/profile/make-private", userHandlers.MakeProfilePrivateHandler).Methods("POST")
+
+	// --- Post & Feed Routes ---
+	auth.HandleFunc("/posts", postHandlers.CreatePostHandler).Methods("POST")
+	auth.HandleFunc("/posts/feed", postHandlers.GetFeedPostsHandler).Methods("GET")
+	auth.HandleFunc("/posts/{postID}/comment", postHandlers.CreateCommentHandler).Methods("POST")
 
 	// Wrap the router with CORS middleware before returning
 	return CORSMiddleware(router)
