@@ -160,7 +160,6 @@ func (h *UserHandler) CurrentUserHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Request) {
-    
 	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -174,23 +173,345 @@ func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Prevent self-following
+	if actor.ID == targetUserID {
+		http.Error(w, "Cannot follow yourself", http.StatusBadRequest)
+		return
+	}
+
 	targetUser, err := models.GetUserByID(targetUserID)
 	if err != nil || targetUser == nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	if !targetUser.IsPublic {
-		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
-		go h.hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
-	} else {
-		// Automatically follow logic here
+	// Check if already following
+	alreadyFollowing, err := models.AreFollowing(actor.ID, targetUserID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if alreadyFollowing {
+		http.Error(w, "Already following this user", http.StatusBadRequest)
+		return
+	}
+
+	// Check if there's already a pending request
+	existingRequest, err := models.GetFollowRequest(actor.ID, targetUserID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if existingRequest != nil {
+		http.Error(w, "Follow request already sent", http.StatusBadRequest)
+		return
+	}
+
+	if targetUser.IsPublic {
+		// For public profiles, automatically follow
+		err = models.FollowUser(actor.ID, targetUserID)
+		if err != nil {
+			http.Error(w, "Failed to follow user", http.StatusInternalServerError)
+			return
+		}
+		
+		// Send real-time updates to both users to refresh their user lists
+		go h.hub.SendUserListUpdate(actor.ID)     
+		go h.hub.SendUserListUpdate(targetUserID) 
+		
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following " + targetUser.FirstName})
+	} else {
+		// For private profiles, create a follow request
+		err = models.CreateFollowRequest(actor.ID, targetUserID)
+		if err != nil {
+			http.Error(w, "Failed to create follow request", http.StatusInternalServerError)
+			return
+		}
+
+		// Send notification to the target user
+		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
+		go h.hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
+		
+		// Send follow request updates to both users to refresh their frontend
+		go h.hub.SendFollowRequestUpdate(targetUser.ID)  // Recipient
+		go h.hub.SendFollowRequestUpdate(actor.ID)       // Requester
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
 	}
 }
+
+// AcceptFollowRequestHandler handles accepting a follow request.
+func (h *UserHandler) AcceptFollowRequestHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	requestID, ok := vars["requestId"]
+	if !ok {
+		http.Error(w, "Request ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	// Get the follow request
+	requests, err := models.GetPendingFollowRequestsForUser(actor.ID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	var targetRequest *models.FollowRequest
+	for _, req := range requests {
+		if req.ID == requestID {
+			targetRequest = req
+			break
+		}
+	}
+
+	if targetRequest == nil {
+		http.Error(w, "Follow request not found", http.StatusNotFound)
+		return
+	}
+
+	// Update the request status to accepted
+	err = models.UpdateFollowRequestStatus(requestID, "accepted")
+	if err != nil {
+		http.Error(w, "Failed to accept request", http.StatusInternalServerError)
+		return
+	}
+
+	// Create the follow relationship
+	err = models.FollowUser(targetRequest.RequesterID, targetRequest.TargetID)
+	if err != nil {
+		http.Error(w, "Failed to create follow relationship", http.StatusInternalServerError)
+		return
+	}
+
+	// Get requester info for notification
+	requester, err := models.GetUserByID(targetRequest.RequesterID)
+	if err != nil {
+		log.Printf("Error getting requester info: %v", err)
+	} else {
+		// Send notification to requester that their request was accepted
+		notificationMessage := fmt.Sprintf("%s %s accepted your follow request.", actor.FirstName, actor.LastName)
+		go h.hub.SendNotification(requester.ID, actor.ID, "follow_accepted", notificationMessage)
+	}
+
+	// Send real-time updates to both users to refresh their follow request lists
+	go h.hub.SendFollowRequestUpdate(actor.ID)      // Recipient (current user)
+	go h.hub.SendFollowRequestUpdate(requester.ID)  // Requester
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request accepted"})
+}
+
+// DeclineFollowRequestHandler handles declining a follow request.
+func (h *UserHandler) DeclineFollowRequestHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	requestID, ok := vars["requestId"]
+	if !ok {
+		http.Error(w, "Request ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	// Get the follow request
+	requests, err := models.GetPendingFollowRequestsForUser(actor.ID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	var targetRequest *models.FollowRequest
+	for _, req := range requests {
+		if req.ID == requestID {
+			targetRequest = req
+			break
+		}
+	}
+
+	if targetRequest == nil {
+		http.Error(w, "Follow request not found", http.StatusNotFound)
+		return
+	}
+
+	// Update the request status to declined
+	err = models.UpdateFollowRequestStatus(requestID, "declined")
+	if err != nil {
+		http.Error(w, "Failed to decline request", http.StatusInternalServerError)
+		return
+	}
+
+	// Get requester info for notification
+	requester, err := models.GetUserByID(targetRequest.RequesterID)
+	if err != nil {
+		log.Printf("Error getting requester info: %v", err)
+	} else {
+		// Send notification to requester that their request was declined
+		notificationMessage := fmt.Sprintf("%s %s declined your follow request.", actor.FirstName, actor.LastName)
+		go h.hub.SendNotification(requester.ID, actor.ID, "follow_declined", notificationMessage)
+	}
+
+	// Send real-time updates to both users to refresh their follow request lists
+	go h.hub.SendFollowRequestUpdate(actor.ID)      // Recipient (current user)
+	go h.hub.SendFollowRequestUpdate(requester.ID)  // Requester
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request declined"})
+}
+
+// CancelFollowRequestHandler handles canceling a follow request (for the requester).
+func (h *UserHandler) CancelFollowRequestHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	requestID, ok := vars["requestId"]
+	if !ok {
+		http.Error(w, "Request ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	// Get the follow request to verify ownership
+	request, err := models.GetFollowRequestByID(requestID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	if request == nil {
+		http.Error(w, "Follow request not found", http.StatusNotFound)
+		return
+	}
+
+	// Verify that the current user is the requester
+	if request.RequesterID != actor.ID {
+		http.Error(w, "Unauthorized to cancel this request", http.StatusForbidden)
+		return
+	}
+
+	// Delete the follow request
+	err = models.DeleteFollowRequest(requestID)
+	if err != nil {
+		http.Error(w, "Failed to cancel request", http.StatusInternalServerError)
+		return
+	}
+
+	// Get recipient info for notification
+	recipient, err := models.GetUserByID(request.TargetID)
+	if err != nil {
+		log.Printf("Error getting recipient info: %v", err)
+	} else {
+		// Send notification to recipient that the request was canceled
+		notificationMessage := fmt.Sprintf("%s %s canceled their follow request.", actor.FirstName, actor.LastName)
+		go h.hub.SendNotification(recipient.ID, actor.ID, "follow_canceled", notificationMessage)
+	}
+
+	// Send real-time updates to both users to refresh their follow request lists
+	go h.hub.SendFollowRequestUpdate(actor.ID)      // Requester (current user)
+	go h.hub.SendFollowRequestUpdate(recipient.ID)  // Recipient
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request canceled"})
+}
+
+// GetFollowRequestsHandler returns all pending follow requests for the current user.
+func (h *UserHandler) GetFollowRequestsHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	requests, err := models.GetPendingFollowRequestsForUser(actor.ID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get requester details for each request
+	var response []map[string]interface{}
+	for _, req := range requests {
+		requester, err := models.GetUserByID(req.RequesterID)
+		if err != nil {
+			log.Printf("Error getting requester info for request %s: %v", req.ID, err)
+			continue
+		}
+
+		response = append(response, map[string]interface{}{
+			"id": req.ID,
+			"requester": map[string]interface{}{
+				"id":        requester.ID,
+				"firstName": requester.FirstName,
+				"lastName":  requester.LastName,
+				"nickname":  requester.Nickname,
+				"avatarPath": requester.AvatarPath,
+			},
+			"createdAt": req.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetMyFollowRequestsHandler returns all pending follow requests sent by the current user.
+func (h *UserHandler) GetMyFollowRequestsHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	requests, err := models.GetPendingFollowRequestsByUser(actor.ID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get recipient details for each request
+	var response []map[string]interface{}
+	for _, req := range requests {
+		recipient, err := models.GetUserByID(req.TargetID)
+		if err != nil {
+			log.Printf("Error getting recipient info for request %s: %v", req.ID, err)
+			continue
+		}
+
+		response = append(response, map[string]interface{}{
+			"id": req.ID,
+			"recipient": map[string]interface{}{
+				"id":        recipient.ID,
+				"firstName": recipient.FirstName,
+				"lastName":  recipient.LastName,
+				"nickname":  recipient.Nickname,
+				"avatarPath": recipient.AvatarPath,
+			},
+			"createdAt": req.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // MakeProfilePrivateHandler is a TEMPORARY handler for debugging purposes.
 // It changes a user's profile to private.
 func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.Request) {
@@ -221,4 +542,46 @@ func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.R
     json.NewEncoder(w).Encode(map[string]string{
         "message": fmt.Sprintf("User %s profile is now private", targetUserID),
     })
+}
+
+// CheckFollowRequestStatusHandler checks if there's a pending follow request from actor to target user
+func (h *UserHandler) CheckFollowRequestStatusHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	targetUserID, ok := vars["userId"]
+	if !ok {
+		http.Error(w, "User ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	// Check if already following
+	alreadyFollowing, err := models.AreFollowing(actor.ID, targetUserID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if there's a pending follow request
+	existingRequest, err := models.GetFollowRequest(actor.ID, targetUserID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	status := "not_following"
+	if alreadyFollowing {
+		status = "following"
+	} else if existingRequest != nil && existingRequest.Status == "pending" {
+		status = "request_sent"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": status,
+	})
 }
