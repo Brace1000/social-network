@@ -16,6 +16,20 @@ var upgrader = websocket.Upgrader{
 		return true 
 	},
 }
+// getSessionTokenFromRequest extracts the session token from either cookie or query parameter
+func getSessionTokenFromRequest(r *http.Request) string {
+	// First try to get from cookie
+	if cookie, err := r.Cookie(services.SessionCookieName); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	
+	// If not in cookie, try query parameter
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
+	}
+	
+	return ""
+}
 
 // ServeWs authenticates the user and handles the websocket connection.
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {

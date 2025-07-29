@@ -124,10 +124,9 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 		log.Printf("Sent private message from %s to %s", senderID, recipientID)
 	} else {
 		log.Printf("Recipient %s is not online.", recipientID)
-		
+
 	}
 }
-
 
 // SendNotification creates a notification, saves it to the DB, and pushes it to the user if they are online.
 func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
@@ -144,7 +143,6 @@ func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
 		log.Printf("Failed to save notification to DB: %v", err)
 		return // Don't send if we can't save it
 	}
-	
 
 	// 2. Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
@@ -184,6 +182,93 @@ func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
 		}
 		log.Printf("Sent real-time notification of type '%s' to user %s", notifType, userID)
 	} else {
-		log.Printf("User %s is not online. Notification saved to DB for later retrieval.", userID)
+		// User is not online, notification saved to DB for later retrieval
+		// (removed debug log to reduce noise)
+	}
+}
+
+// SendFollowRequestUpdate sends a message to refresh follow requests for a user
+func (h *Hub) SendFollowRequestUpdate(userID string) {
+	// Check if the target user is online
+	if userClients, ok := h.clients[userID]; ok {
+		// Create the follow request update message
+		updateMsg := struct {
+			Type string `json:"type"`
+			Data struct {
+				Action string `json:"action"`
+			} `json:"data"`
+			Timestamp time.Time `json:"timestamp"`
+		}{
+			Type: "follow_request_update",
+			Data: struct {
+				Action string `json:"action"`
+			}{
+				Action: "refresh",
+			},
+			Timestamp: time.Now(),
+		}
+
+		messageBytes, err := json.Marshal(updateMsg)
+		if err != nil {
+			log.Printf("Failed to marshal follow request update: %v", err)
+			return
+		}
+
+		// Send the update to all of that user's active connections
+		for client := range userClients {
+			select {
+			case client.send <- messageBytes:
+			default:
+				close(client.send)
+				delete(userClients, client)
+			}
+		}
+		log.Printf("Sent follow request update to user %s", userID)
+	} else {
+		// User is not online, update will be handled when they connect
+		// (removed debug log to reduce noise)
+	}
+}
+
+// SendUserListUpdate sends a message to refresh the user list for a user
+func (h *Hub) SendUserListUpdate(userID string) {
+	// Check if the target user is online
+	if userClients, ok := h.clients[userID]; ok {
+		// Create the user list update message
+		updateMsg := struct {
+			Type string `json:"type"`
+			Data struct {
+				Action string `json:"action"`
+			} `json:"data"`
+			Timestamp time.Time `json:"timestamp"`
+		}{
+			Type: "user_list_update",
+			Data: struct {
+				Action string `json:"action"`
+			}{
+				Action: "refresh",
+			},
+			Timestamp: time.Now(),
+		}
+
+		messageBytes, err := json.Marshal(updateMsg)
+		if err != nil {
+			log.Printf("Failed to marshal user list update: %v", err)
+			return
+		}
+
+		// Send the update to all of that user's active connections
+		for client := range userClients {
+			select {
+			case client.send <- messageBytes:
+			default:
+				close(client.send)
+				delete(userClients, client)
+			}
+		}
+		log.Printf("Sent user list update to user %s", userID)
+	} else {
+		// User is not online, update will be handled when they connect
+		// (removed debug log to reduce noise)
 	}
 }
