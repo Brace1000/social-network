@@ -13,6 +13,7 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Instantiate all handler groups
 	userHandlers := NewUserHandlers(hub)
 	postHandlers := NewPostHandlers()
+chatHandlers := NewChatHandlers(hub)  // Add chat handlers
 
 	router := mux.NewRouter()
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
@@ -29,11 +30,7 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 
 	// --- Protected Routes (require a valid session cookie via AuthMiddleware) ---
 	auth := apiRouter.PathPrefix("").Subrouter()
-
-
 	auth.Use(AuthMiddleware)
-
-
 
 	// --- User & Follower Routes ---
 	auth.HandleFunc("/me", userHandlers.CurrentUserHandler).Methods("GET")
@@ -55,10 +52,13 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	auth.HandleFunc("/posts", postHandlers.CreatePostHandler).Methods("POST")
 	auth.HandleFunc("/posts/feed", postHandlers.GetFeedPostsHandler).Methods("GET")
 	auth.HandleFunc("/posts/{postID}/comment", postHandlers.CreateCommentHandler).Methods("POST")
-
-	// --- NEW LIKE/DISLIKE ROUTES ---
 	auth.HandleFunc("/posts/{postID}/like", postHandlers.LikePostHandler).Methods("POST")
 	auth.HandleFunc("/comments/{commentID}/like", postHandlers.LikeCommentHandler).Methods("POST")
+// Gets the message history with a specific user.
+	auth.HandleFunc("/chats/private/{userID}", chatHandlers.GetPrivateConversationHandler).Methods("GET")
+	
+	// Gets the message history for a specific group.
+	auth.HandleFunc("/chats/group/{groupID}", chatHandlers.GetGroupConversationHandler).Methods("GET")
 
 	// Wrap the router with CORS middleware before returning
 	return CORSMiddleware(router)
