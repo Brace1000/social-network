@@ -28,29 +28,29 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	})
 
 	// --- User & Follower Routes ---
-	apiRouter.HandleFunc("/me",  AuthMiddleware(userHandlers.CurrentUserHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/users", AuthMiddleware(userHandlers.GetAllUsersHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow/{userId}", AuthMiddleware(userHandlers.FollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/my-follow-requests", AuthMiddleware(userHandlers.GetMyFollowRequestsHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow-requests/{requestId}/accept", AuthMiddleware(userHandlers.AcceptFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow-requests/{requestId}/decline", AuthMiddleware(userHandlers.DeclineFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow-requests/{requestId}/cancel", AuthMiddleware(userHandlers.CancelFollowRequestHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/follow-requests", AuthMiddleware(userHandlers.ListPendingFollowRequestsHandler)).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/me",  AuthMiddleware(http.HandlerFunc(userHandlers.CurrentUserHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/users", AuthMiddleware(http.HandlerFunc(userHandlers.GetAllUsersHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/follow/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.FollowRequestHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/my-follow-requests", AuthMiddleware(http.HandlerFunc(userHandlers.GetMyFollowRequestsHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/follow-requests/{requestId}/accept", AuthMiddleware(http.HandlerFunc(userHandlers.AcceptFollowRequestHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/follow-requests/{requestId}/decline", AuthMiddleware(http.HandlerFunc(userHandlers.DeclineFollowRequestHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/follow-requests/{requestId}/cancel", AuthMiddleware(http.HandlerFunc(userHandlers.CancelFollowRequestHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/follow-requests", AuthMiddleware(http.HandlerFunc(userHandlers.ListPendingFollowRequestsHandler))).Methods("GET", "OPTIONS")
 	
 	// --- Notification Routes ---
-	apiRouter.HandleFunc("/notifications", AuthMiddleware(userHandlers.GetNotificationsHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/notifications/{notificationId}/read", AuthMiddleware(userHandlers.MarkNotificationAsReadHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/unfollow/{userId}", AuthMiddleware(userHandlers.UnfollowHandler)).Methods("POST", "OPTIONS") // Using POST for consistency
-	apiRouter.HandleFunc("/followers/{userId}", AuthMiddleware(userHandlers.ListFollowersHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/following/{userId}", AuthMiddleware(userHandlers.ListFollowingHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/follow-status/{userId}", AuthMiddleware(userHandlers.CheckFollowRequestStatusHandler)).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/notifications", AuthMiddleware(http.HandlerFunc(userHandlers.GetNotificationsHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/notifications/{notificationId}/read", AuthMiddleware(http.HandlerFunc(userHandlers.MarkNotificationAsReadHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/unfollow/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.UnfollowHandler))).Methods("POST", "OPTIONS") // Using POST for consistency
+	apiRouter.Handle("/followers/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.ListFollowersHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/following/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.ListFollowingHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/follow-status/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.CheckFollowRequestStatusHandler))).Methods("GET", "OPTIONS")
 
 	// --- Profile Routes ---
-	apiRouter.HandleFunc("/profile/{userId}", AuthMiddleware(userHandlers.GetProfileHandler)).Methods("GET", "OPTIONS")
-	apiRouter.HandleFunc("/profile", AuthMiddleware(userHandlers.UpdateProfileHandler)).Methods("PUT", "OPTIONS")
-	apiRouter.HandleFunc("/profile/avatar", AuthMiddleware(userHandlers.UploadAvatarHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/profile/make-private", AuthMiddleware(userHandlers.MakeProfilePrivateHandler)).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/profile/toggle-privacy", AuthMiddleware(userHandlers.ToggleProfilePrivacyHandler)).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/profile/{userId}", AuthMiddleware(http.HandlerFunc(userHandlers.GetProfileHandler))).Methods("GET", "OPTIONS")
+	apiRouter.Handle("/profile", AuthMiddleware(http.HandlerFunc(userHandlers.UpdateProfileHandler))).Methods("PUT", "OPTIONS")
+	apiRouter.Handle("/profile/avatar", AuthMiddleware(http.HandlerFunc(userHandlers.UploadAvatarHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/profile/make-private", AuthMiddleware(http.HandlerFunc(userHandlers.MakeProfilePrivateHandler))).Methods("POST", "OPTIONS")
+	apiRouter.Handle("/profile/toggle-privacy", AuthMiddleware(http.HandlerFunc(userHandlers.ToggleProfilePrivacyHandler))).Methods("POST", "OPTIONS")
 
 	// --- Post & Feed Routes ---
 	apiRouter.HandleFunc("/posts", postHandlers.CreatePostHandler).Methods("POST")
@@ -58,8 +58,8 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	apiRouter.HandleFunc("/posts/{postID}/comment", postHandlers.CreateCommentHandler).Methods("POST")
 
 	// --- NEW LIKE/DISLIKE ROUTES ---
-	auth.HandleFunc("/posts/{postID}/like", postHandlers.LikePostHandler).Methods("POST")
-	auth.HandleFunc("/comments/{commentID}/like", postHandlers.LikeCommentHandler).Methods("POST")
+	apiRouter.HandleFunc("/posts/{postID}/like", postHandlers.LikePostHandler).Methods("POST")
+	apiRouter.HandleFunc("/comments/{commentID}/like", postHandlers.LikeCommentHandler).Methods("POST")
 
 	// Wrap the router with CORS middleware before returning
 	return CORSMiddleware(router)
