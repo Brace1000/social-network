@@ -12,8 +12,8 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		
-		return true 
+		// In production, you should validate the origin
+		return true
 	},
 }
 // getSessionTokenFromRequest extracts the session token from either cookie or query parameter
@@ -31,24 +31,23 @@ func getSessionTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
-// ServeWs authenticates the user and handles the websocket connection.
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	// 1. Authenticate the user from the session cookie
+	// Authenticate user
 	user, err := services.GetUserFromSession(r)
 	if err != nil || user == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		log.Println("Unauthorized WebSocket connection attempt.")
+		log.Println("Unauthorized WebSocket connection attempt")
 		return
 	}
 
-	// 2. Upgrade the HTTP connection to a WebSocket connection
+	// Upgrade to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade connection: %v", err)
 		return
 	}
 
-	// 3. Create a new client with the authenticated UserID
+	// Create client
 	client := &Client{
 		hub:    hub,
 		conn:   conn,
@@ -57,7 +56,7 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 	client.hub.register <- client
 
-	// Allow collection of memory referenced by the goroutines
+	// Start communication
 	go client.writePump()
 	go client.readPump()
 }

@@ -15,7 +15,7 @@ type contextKey string
 
 const (
 	SessionCookieName = "social_network_session"
-	SessionDuration   = 24 * 14 * time.Hour // Sessions last for one week
+	SessionDuration   = 24 * 7 * time.Hour // Sessions last for one week
 	UserContextKey    = contextKey("user")
 )
 
