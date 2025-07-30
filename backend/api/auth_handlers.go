@@ -101,38 +101,42 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
 
-// LoginHandler authenticates a user and creates a session in both the database and as a cookie.
+
+
 func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("--- LoginHandler: Running ---")
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	// 1. Find user by email in the database
 	var userID, userEmail, userFirstName, userLastName, userNickname, hashedPassword string
-
 	query := "SELECT id, email, first_name, last_name, nickname, password_hash FROM users WHERE email = ?"
+	log.Printf("LoginHandler: Executing DB query to find user: %s", req.Email)
 	err := database.DB.QueryRow(query, req.Email).Scan(&userID, &userEmail, &userFirstName, &userLastName, &userNickname, &hashedPassword)
 	if err != nil {
-		// ... (error handling is the same)
+		log.Printf("LoginHandler: FAILED finding user in DB. Error: %v", err)
+		respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
+	log.Printf("LoginHandler: SUCCESS finding user in DB. User ID: %s", userID)
 
-	// 2. Compare the provided password with the stored hash
 	if !services.CheckPasswordHash(req.Password, hashedPassword) {
-		respondWithError(w, http.StatusUnauthorized, "Invalid credentials (password mismatch)")
+		log.Println("LoginHandler: FAILED password check.")
+		respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
+	log.Println("LoginHandler: SUCCESS password check.")
 
-	// 3. Create and save a new session to the database
-	sessionToken, expiryTime, err := createAndSaveSession(userID) // Pass the string ID
+	sessionToken, expiryTime, err := createAndSaveSession(userID)
 	if err != nil {
-		// ...
+		log.Printf("LoginHandler: FAILED creating session. Error: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to create session")
 		return
 	}
 
-	// 4. Set the session cookie on the HTTP response
+	log.Printf("LoginHandler: Setting cookie with name 'social_network_session' and value '%s'", sessionToken)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "social_network_session",
 		Value:    sessionToken,
@@ -142,7 +146,7 @@ func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// 5. Respond with user info upon successful login
+	log.Println("LoginHandler: Login successful. Sending response.")
 	respondWithJSON(w, http.StatusOK, UserResponse{
 		ID:        userID,
 		FirstName: userFirstName,
@@ -153,26 +157,20 @@ func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createAndSaveSession(userID string) (string, time.Time, error) {
-	// Generate a new Version 4 UUID as the session token.
-	tokenUUID := uuid.New()
+	tokenUUID, err := uuid.NewRandom()
+	if err != nil { return "", time.Time{}, err }
 	token := tokenUUID.String()
-
-	// Set an expiry time for the session (e.g., 7 days).
 	expiry := time.Now().Add(7 * 24 * time.Hour)
 
-	// Insert the new session record into the `sessions` table.
+	log.Printf("createAndSaveSession: Attempting to INSERT token '%s' for user '%s' into DB.", token, userID)
 	query := "INSERT INTO sessions (token, user_id, expiry) VALUES (?, ?, ?)"
-	stmt, err := database.DB.Prepare(query)
+	_, err = database.DB.Exec(query, token, userID, expiry)
 	if err != nil {
-		return "", time.Time{}, err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(token, userID, expiry)
-	if err != nil {
+		log.Printf("createAndSaveSession: FAILED to insert session into DB. Error: %v", err)
 		return "", time.Time{}, err
 	}
 
+	log.Println("createAndSaveSession: SUCCESS inserting session into DB.")
 	return token, expiry, nil
 }
 
