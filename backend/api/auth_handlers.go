@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
+
+	"social-network/database"
 	"social-network/database/models"
 	"social-network/services"
 	"social-network/websocket"
@@ -33,6 +36,7 @@ type RegisterRequest struct {
 	DateOfBirth string `json:"dateOfBirth"`
 	AboutMe     string `json:"aboutMe,omitempty"`
 }
+
 // ... (LoginRequest and UserResponse are the same as before)
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -40,18 +44,17 @@ type LoginRequest struct {
 }
 
 type UserResponse struct {
-	ID        string `json:"id"`
+	ID        string `json:"id"` // <-- CHANGED: ID is a STRING
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
 	Email     string `json:"email"`
 	Nickname  string `json:"nickname,omitempty"`
 }
 
-
 // --- Handlers are now methods on the UserHandler struct ---
 
 func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
-    // This code remains exactly the same as before.
+	// This code remains exactly the same as before.
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -98,41 +101,77 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
 
+
+
 func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
-    // This code remains exactly the same as before.
+	log.Println("--- LoginHandler: Running ---")
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	user, err := models.GetUserByEmail(req.Email)
-	if err != nil || user == nil {
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
-		return
-	}
-
-	if !services.CheckPasswordHash(req.Password, user.PasswordHash) {
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
-		return
-	}
-
-	sessionToken, err := services.CreateSession(user.ID)
+	var userID, userEmail, userFirstName, userLastName, userNickname, hashedPassword string
+	query := "SELECT id, email, first_name, last_name, nickname, password_hash FROM users WHERE email = ?"
+	log.Printf("LoginHandler: Executing DB query to find user: %s", req.Email)
+	err := database.DB.QueryRow(query, req.Email).Scan(&userID, &userEmail, &userFirstName, &userLastName, &userNickname, &hashedPassword)
 	if err != nil {
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		log.Printf("LoginHandler: FAILED finding user in DB. Error: %v", err)
+		respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+	log.Printf("LoginHandler: SUCCESS finding user in DB. User ID: %s", userID)
+
+	if !services.CheckPasswordHash(req.Password, hashedPassword) {
+		log.Println("LoginHandler: FAILED password check.")
+		respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
+	}
+	log.Println("LoginHandler: SUCCESS password check.")
+
+	sessionToken, expiryTime, err := createAndSaveSession(userID)
+	if err != nil {
+		log.Printf("LoginHandler: FAILED creating session. Error: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to create session")
 		return
 	}
 
-	services.SetSessionCookie(w, sessionToken)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(UserResponse{
-		ID:        user.ID,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-		Email:     user.Email,
-		Nickname:  user.Nickname,
+	log.Printf("LoginHandler: Setting cookie with name 'social_network_session' and value '%s'", sessionToken)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "social_network_session",
+		Value:    sessionToken,
+		Expires:  expiryTime,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
+
+	log.Println("LoginHandler: Login successful. Sending response.")
+	respondWithJSON(w, http.StatusOK, UserResponse{
+		ID:        userID,
+		FirstName: userFirstName,
+		LastName:  userLastName,
+		Email:     userEmail,
+		Nickname:  userNickname,
+	})
+}
+
+func createAndSaveSession(userID string) (string, time.Time, error) {
+	tokenUUID, err := uuid.NewRandom()
+	if err != nil { return "", time.Time{}, err }
+	token := tokenUUID.String()
+	expiry := time.Now().Add(7 * 24 * time.Hour)
+
+	log.Printf("createAndSaveSession: Attempting to INSERT token '%s' for user '%s' into DB.", token, userID)
+	query := "INSERT INTO sessions (token, user_id, expiry) VALUES (?, ?, ?)"
+	_, err = database.DB.Exec(query, token, userID, expiry)
+	if err != nil {
+		log.Printf("createAndSaveSession: FAILED to insert session into DB. Error: %v", err)
+		return "", time.Time{}, err
+	}
+
+	log.Println("createAndSaveSession: SUCCESS inserting session into DB.")
+	return token, expiry, nil
 }
 
 func (h *UserHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -214,11 +253,11 @@ func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "Failed to follow user", http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Send real-time updates to both users to refresh their user lists
-		go h.hub.SendUserListUpdate(actor.ID)     
-		go h.hub.SendUserListUpdate(targetUserID) 
-		
+		go h.hub.SendUserListUpdate(actor.ID)
+		go h.hub.SendUserListUpdate(targetUserID)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following " + targetUser.FirstName})
@@ -233,11 +272,11 @@ func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Reques
 		// Send notification to the target user
 		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
 		go h.hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
-		
+
 		// Send follow request updates to both users to refresh their frontend
-		go h.hub.SendFollowRequestUpdate(targetUser.ID)  // Recipient
-		go h.hub.SendFollowRequestUpdate(actor.ID)       // Requester
-		
+		go h.hub.SendFollowRequestUpdate(targetUser.ID) // Recipient
+		go h.hub.SendFollowRequestUpdate(actor.ID)      // Requester
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
@@ -304,8 +343,8 @@ func (h *UserHandler) AcceptFollowRequestHandler(w http.ResponseWriter, r *http.
 	}
 
 	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)      // Recipient (current user)
-	go h.hub.SendFollowRequestUpdate(requester.ID)  // Requester
+	go h.hub.SendFollowRequestUpdate(actor.ID)     // Recipient (current user)
+	go h.hub.SendFollowRequestUpdate(requester.ID) // Requester
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -365,8 +404,8 @@ func (h *UserHandler) DeclineFollowRequestHandler(w http.ResponseWriter, r *http
 	}
 
 	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)      // Recipient (current user)
-	go h.hub.SendFollowRequestUpdate(requester.ID)  // Requester
+	go h.hub.SendFollowRequestUpdate(actor.ID)     // Recipient (current user)
+	go h.hub.SendFollowRequestUpdate(requester.ID) // Requester
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -424,8 +463,8 @@ func (h *UserHandler) CancelFollowRequestHandler(w http.ResponseWriter, r *http.
 	}
 
 	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)      // Requester (current user)
-	go h.hub.SendFollowRequestUpdate(recipient.ID)  // Recipient
+	go h.hub.SendFollowRequestUpdate(actor.ID)     // Requester (current user)
+	go h.hub.SendFollowRequestUpdate(recipient.ID) // Recipient
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -458,10 +497,10 @@ func (h *UserHandler) GetFollowRequestsHandler(w http.ResponseWriter, r *http.Re
 		response = append(response, map[string]interface{}{
 			"id": req.ID,
 			"requester": map[string]interface{}{
-				"id":        requester.ID,
-				"firstName": requester.FirstName,
-				"lastName":  requester.LastName,
-				"nickname":  requester.Nickname,
+				"id":         requester.ID,
+				"firstName":  requester.FirstName,
+				"lastName":   requester.LastName,
+				"nickname":   requester.Nickname,
 				"avatarPath": requester.AvatarPath,
 			},
 			"createdAt": req.CreatedAt,
@@ -498,10 +537,10 @@ func (h *UserHandler) GetMyFollowRequestsHandler(w http.ResponseWriter, r *http.
 		response = append(response, map[string]interface{}{
 			"id": req.ID,
 			"recipient": map[string]interface{}{
-				"id":        recipient.ID,
-				"firstName": recipient.FirstName,
-				"lastName":  recipient.LastName,
-				"nickname":  recipient.Nickname,
+				"id":         recipient.ID,
+				"firstName":  recipient.FirstName,
+				"lastName":   recipient.LastName,
+				"nickname":   recipient.Nickname,
 				"avatarPath": recipient.AvatarPath,
 			},
 			"createdAt": req.CreatedAt,
@@ -515,33 +554,33 @@ func (h *UserHandler) GetMyFollowRequestsHandler(w http.ResponseWriter, r *http.
 // MakeProfilePrivateHandler is a TEMPORARY handler for debugging purposes.
 // It changes a user's profile to private.
 func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.Request) {
-    _, ok := r.Context().Value(services.UserContextKey).(*models.User)
-    if !ok {
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
+	_, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
-    // Get the user ID from the URL path
-    vars := mux.Vars(r)
-    targetUserID, ok := vars["userId"]
-    if !ok {
-        http.Error(w, "User ID not provided", http.StatusBadRequest)
-        return
-    }
+	// Get the user ID from the URL path
+	vars := mux.Vars(r)
+	targetUserID, ok := vars["userId"]
+	if !ok {
+		http.Error(w, "User ID not provided", http.StatusBadRequest)
+		return
+	}
 
-    // Perform the database update
-    err := models.SetUserProfilePrivacy(targetUserID, false) // false means private
-    if err != nil {
-        log.Printf("Error updating user privacy: %v", err)
-        http.Error(w, "Failed to update profile", http.StatusInternalServerError)
-        return
-    }
+	// Perform the database update
+	err := models.SetUserProfilePrivacy(targetUserID, false) // false means private
+	if err != nil {
+		log.Printf("Error updating user privacy: %v", err)
+		http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+		return
+	}
 
-    log.Printf("User %s profile has been set to PRIVATE for testing.", targetUserID)
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(map[string]string{
-        "message": fmt.Sprintf("User %s profile is now private", targetUserID),
-    })
+	log.Printf("User %s profile has been set to PRIVATE for testing.", targetUserID)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": fmt.Sprintf("User %s profile is now private", targetUserID),
+	})
 }
 
 // CheckFollowRequestStatusHandler checks if there's a pending follow request from actor to target user
