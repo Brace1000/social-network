@@ -44,18 +44,64 @@ func (h *UserHandler) GetProfileHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := map[string]interface{}{
-		"id": targetUser.ID,
-		"firstName": targetUser.FirstName,
-		"lastName": targetUser.LastName,
-		"nickname": targetUser.Nickname,
-		"email": targetUser.Email,
-		"dateOfBirth": targetUser.DateOfBirth,
-		"avatarPath": targetUser.AvatarPath,
-		"aboutMe": targetUser.AboutMe,
-		"isPublic": targetUser.IsPublic,
-		// TODO: Add posts, followers, following counts if needed
+	followerIDs, errFollowers := models.ListFollowers(targetUserID)
+	followers := []*models.User{}
+	if errFollowers != nil {
+		fmt.Printf("Error fetching followers for user %s: %v", targetUserID, errFollowers)
+	} else {
+		for _, id := range followerIDs {
+			user, err := models.GetUserByID(id)
+			if err == nil && user != nil {
+				followers = append(followers, user)
+			}
+		}
 	}
+	followingIDs, errFollowing := models.ListFollowing(targetUserID)
+	following := []*models.User{}
+	if errFollowing != nil {
+		fmt.Printf("Error fetching following for user %s: %v", targetUserID, errFollowing)
+	} else {
+		for _, id := range followingIDs {
+			user, err := models.GetUserByID(id)
+			if err == nil && user != nil {
+				following = append(following, user)
+			}
+		}
+	}
+
+	// Only return public info for followers/following
+	serializeUser := func(u *models.User) map[string]interface{} {
+		return map[string]interface{}{
+			"id":         u.ID,
+			"firstName":  u.FirstName,
+			"lastName":   u.LastName,
+			"nickname":   u.Nickname,
+			"avatarPath": u.AvatarPath,
+			"aboutMe":    u.AboutMe,
+			"isPublic":   u.IsPublic,
+		}
+	}
+
+	resp := map[string]interface{}{
+		"id":          targetUser.ID,
+		"firstName":   targetUser.FirstName,
+		"lastName":    targetUser.LastName,
+		"nickname":    targetUser.Nickname,
+		"email":       targetUser.Email,
+		"dateOfBirth": targetUser.DateOfBirth,
+		"avatarPath":  targetUser.AvatarPath,
+		"aboutMe":     targetUser.AboutMe,
+		"isPublic":    targetUser.IsPublic,
+		"followers":   make([]map[string]interface{}, 0),
+		"following":   make([]map[string]interface{}, 0),
+	}
+	for _, u := range followers {
+		resp["followers"] = append(resp["followers"].([]map[string]interface{}), serializeUser(u))
+	}
+	for _, u := range following {
+		resp["following"] = append(resp["following"].([]map[string]interface{}), serializeUser(u))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -164,4 +210,142 @@ func (h *UserHandler) UploadAvatarHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Avatar uploaded successfully", "avatarPath": avatarPath})
-} 
+}
+
+// GetAllUsersHandler returns a list of all users
+func (h *UserHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
+	users, err := models.GetAllUsers()
+	if err != nil {
+		http.Error(w, "Failed to fetch users", http.StatusInternalServerError)
+		return
+	}
+
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	var filtered []map[string]interface{}
+	for _, user := range users {
+		if ok && user.ID == actor.ID {
+			continue
+		}
+		isFollowing := false
+		if ok {
+			isFollowing, _ = models.AreFollowing(actor.ID, user.ID)
+		}
+		filtered = append(filtered, map[string]interface{}{
+			"id":          user.ID,
+			"firstName":   user.FirstName,
+			"lastName":    user.LastName,
+			"nickname":    user.Nickname,
+			"email":       user.Email,
+			"dateOfBirth": user.DateOfBirth,
+			"avatarPath":  user.AvatarPath,
+			"aboutMe":     user.AboutMe,
+			"isPublic":    user.IsPublic,
+			"isFollowing": isFollowing,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(filtered)
+}
+
+// GetNotificationsHandler returns all notifications for the current user.
+func (h *UserHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	notifications, err := models.GetNotificationsForUser(actor.ID)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get actor details for each notification
+	var response []map[string]interface{}
+	for _, notif := range notifications {
+		notificationData := map[string]interface{}{
+			"id":        notif.ID,
+			"type":      notif.Type,
+			"message":   notif.Message,
+			"read":      notif.Read,
+			"createdAt": notif.CreatedAt,
+		}
+
+		// Add actor details if available
+		if notif.ActorID != "" {
+			actor, err := models.GetUserByID(notif.ActorID)
+			if err == nil && actor != nil {
+				notificationData["actor"] = map[string]interface{}{
+					"id":        actor.ID,
+					"firstName": actor.FirstName,
+					"lastName":  actor.LastName,
+					"nickname":  actor.Nickname,
+					"avatarPath": actor.AvatarPath,
+				}
+			}
+		}
+
+		response = append(response, notificationData)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// MarkNotificationAsReadHandler marks a notification as read.
+func (h *UserHandler) MarkNotificationAsReadHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	notificationID, ok := vars["notificationId"]
+	if !ok {
+		http.Error(w, "Notification ID not provided", http.StatusBadRequest)
+		return
+	}
+
+	err := models.MarkNotificationAsRead(notificationID, actor.ID)
+	if err != nil {
+		http.Error(w, "Failed to mark notification as read", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Notification marked as read"})
+}
+
+// ToggleProfilePrivacyHandler toggles the profile privacy setting for the current user
+func (h *UserHandler) ToggleProfilePrivacyHandler(w http.ResponseWriter, r *http.Request) {
+	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get current user to check current privacy setting
+	currentUser, err := models.GetUserByID(actor.ID)
+	if err != nil {
+		http.Error(w, "Failed to get user information", http.StatusInternalServerError)
+		return
+	}
+
+	// Toggle the privacy setting
+	newPrivacySetting := !currentUser.IsPublic
+	err = models.SetUserProfilePrivacy(actor.ID, newPrivacySetting)
+	if err != nil {
+		http.Error(w, "Failed to update profile privacy", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Profile privacy updated successfully",
+		"isPublic": newPrivacySetting,
+	})
+}

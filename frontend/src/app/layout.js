@@ -1,5 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
-
+import AppWrapper from "../components/AppWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,7 +20,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+        <AppWrapper>
+          {children}
+        </AppWrapper>
       </body>
     </html>
   );
