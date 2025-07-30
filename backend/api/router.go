@@ -18,10 +18,7 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Create the main router
 	router := mux.NewRouter()
 
-	// ======================================================================
-	// CRITICAL FIX: Apply the CORS middleware to the main router FIRST.
-	// This ensures CORS is handled before any other middleware, like auth.
-	// ======================================================================
+	
 	router.Use(CORSMiddleware)
 
 	// --- All subsequent routes are attached to the CORS-aware router ---
@@ -42,7 +39,7 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Create a sub-router for all routes that require authentication.
 	auth := apiRouter.PathPrefix("").Subrouter()
 	// Now, apply the AuthMiddleware. It will run AFTER the CORS middleware.
-	auth.Use(AuthMiddleware)
+	 auth.Use(AuthMiddleware)
 
 	// --- Attach all protected handlers to the `auth` sub-router ---
 	// User & Follower Routes
