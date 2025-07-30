@@ -21,11 +21,9 @@ type LikeRequest struct {
 // PostHandlers holds dependencies for post-related handlers.
 type PostHandlers struct{}
 
-
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
 }
-
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -40,7 +38,7 @@ func NewPostHandlers() *PostHandlers {
 
 // LikePostHandler handles liking, disliking, or removing a vote from a post.
 func (h *PostHandlers) LikePostHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -84,7 +82,7 @@ func (h *PostHandlers) LikePostHandler(w http.ResponseWriter, r *http.Request) {
 
 // LikeCommentHandler handles liking, disliking, or removing a vote from a comment.
 func (h *PostHandlers) LikeCommentHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -120,7 +118,7 @@ func (h *PostHandlers) LikeCommentHandler(w http.ResponseWriter, r *http.Request
 }
 
 // SetPostLike inserts, updates, or deletes a user's vote on a post.
-func SetPostLike(userID, postID, likeType int) error {
+func SetPostLike(userID string, postID, likeType int) error {
 	// If likeType is 0, we delete the vote.
 	if likeType == 0 {
 		_, err := database.DB.Exec("DELETE FROM post_likes WHERE user_id = ? AND post_id = ?", userID, postID)
@@ -138,7 +136,7 @@ func SetPostLike(userID, postID, likeType int) error {
 }
 
 // SetCommentLike inserts, updates, or deletes a user's vote on a comment.
-func SetCommentLike(userID, commentID, likeType int) error {
+func SetCommentLike(userID string, commentID, likeType int) error {
 	if likeType == 0 {
 		_, err := database.DB.Exec("DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?", userID, commentID)
 		return err
@@ -154,7 +152,7 @@ func SetCommentLike(userID, commentID, likeType int) error {
 }
 
 // GetFeedForUser retrieves all posts visible to a user, now including like counts.
-func GetFeedForUser(userID int) ([]models.PostWithAuthor, error) {
+func GetFeedForUser(userID string) ([]models.PostWithAuthor, error) {
 	// This query is now more complex. It uses subqueries to calculate
 	// like/dislike counts for each post and to check the current user's reaction.
 	const query = `
@@ -204,9 +202,8 @@ func GetFeedForUser(userID int) ([]models.PostWithAuthor, error) {
 	return posts, rows.Err()
 }
 
-
 func (h *PostHandlers) CreatePostHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -255,7 +252,7 @@ func (h *PostHandlers) CreatePostHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *PostHandlers) CreateCommentHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -298,7 +295,7 @@ func (h *PostHandlers) CreateCommentHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *PostHandlers) GetFeedPostsHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int)
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok {
 		respondWithError(w, http.StatusUnauthorized, "User not authenticated")
 		return
@@ -343,9 +340,9 @@ func AddAllowedUsersForPost(postID int, allowedUsers []int) error {
 	return nil
 }
 
-func CanUserViewPost(userID, postID int) (bool, error) {
+func CanUserViewPost(userID string, postID int) (bool, error) {
 	var privacy string
-	var authorID int
+	var authorID string
 	err := database.DB.QueryRow("SELECT privacy, user_id FROM posts WHERE id = ?", postID).Scan(&privacy, &authorID)
 	if err != nil {
 		if err == sql.ErrNoRows {
