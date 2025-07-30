@@ -5,7 +5,7 @@ import "time"
 // Post represents the core data of a single post in the database.
 type Post struct {
 	ID        int       `json:"id"`
-	UserID    int       `json:"user_id"` // This is the author's ID
+	UserID    string    `json:"user_id"` // This is the author's ID (UUID)
 	Content   string    `json:"content"`
 	ImageURL  string    `json:"image_url,omitempty"`
 	Privacy   string    `json:"privacy"` // 'public', 'almost_private', 'private'
@@ -16,7 +16,7 @@ type Post struct {
 type Comment struct {
 	ID                int       `json:"id"`
 	PostID            int       `json:"post_id"`
-	UserID            int       `json:"user_id"`
+	UserID            string      `json:"user_id"`
 	Content           string    `json:"content"`
 	ImageURL          string    `json:"image_url,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
