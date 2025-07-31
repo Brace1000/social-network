@@ -3,13 +3,16 @@
 import React from 'react';
 import { AuthProvider } from '../store/AuthContext';
 import { NotificationProvider } from '../store/NotificationContext';
+import { ChatProvider } from '../store/ChatContext';
 
 export default function AppWrapper({ children }) {
   return (
     <AuthProvider>
       <NotificationProvider>
-        {children}
+        <ChatProvider>
+          {children}
+        </ChatProvider>
       </NotificationProvider>
     </AuthProvider>
   );
-} 
+}
