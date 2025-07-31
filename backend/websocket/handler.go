@@ -16,27 +16,41 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
+
 // getSessionTokenFromRequest extracts the session token from either cookie or query parameter
 func getSessionTokenFromRequest(r *http.Request) string {
 	// First try to get from cookie
 	if cookie, err := r.Cookie(services.SessionCookieName); err == nil && cookie.Value != "" {
 		return cookie.Value
 	}
-	
+
 	// If not in cookie, try query parameter
 	if token := r.URL.Query().Get("token"); token != "" {
 		return token
 	}
-	
+
 	return ""
 }
 
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	// Authenticate user
-	user, err := services.GetUserFromSession(r)
-	if err != nil || user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		log.Println("Unauthorized WebSocket connection attempt")
+	// Get session token from cookie or query parameter
+	sessionToken := getSessionTokenFromRequest(r)
+	if sessionToken == "" {
+		http.Error(w, "Unauthorized: No session token", http.StatusUnauthorized)
+		log.Println("Unauthorized WebSocket connection attempt: No session token")
+		return
+	}
+
+	// Authenticate user using the session token
+	user, err := services.GetUserFromSessionToken(sessionToken)
+	if err != nil {
+		http.Error(w, "Unauthorized: Invalid session", http.StatusUnauthorized)
+		log.Printf("Unauthorized WebSocket connection attempt: Error getting user from session token %s: %v", sessionToken, err)
+		return
+	}
+	if user == nil {
+		http.Error(w, "Unauthorized: Invalid session", http.StatusUnauthorized)
+		log.Printf("Unauthorized WebSocket connection attempt: No user found for session token %s", sessionToken)
 		return
 	}
 

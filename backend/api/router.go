@@ -18,7 +18,6 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Create the main router
 	router := mux.NewRouter()
 
-	
 	router.Use(CORSMiddleware)
 
 	// --- All subsequent routes are attached to the CORS-aware router ---
@@ -39,7 +38,7 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Create a sub-router for all routes that require authentication.
 	auth := apiRouter.PathPrefix("").Subrouter()
 	// Now, apply the AuthMiddleware. It will run AFTER the CORS middleware.
-	 auth.Use(AuthMiddleware)
+	auth.Use(AuthMiddleware)
 
 	// --- Attach all protected handlers to the `auth` sub-router ---
 	// User & Follower Routes
@@ -74,8 +73,12 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	auth.HandleFunc("/comments/{commentID}/like", postHandlers.LikeCommentHandler).Methods("POST")
 
 	// Chat Routes
-	auth.HandleFunc("/chats/private/{userID}", chatHandlers.GetPrivateConversationHandler).Methods("GET")
-	auth.HandleFunc("/chats/group/{groupID}", chatHandlers.GetGroupConversationHandler).Methods("GET")
+	auth.HandleFunc("/chats/conversations", chatHandlers.GetConversationsHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/private/{userID}", chatHandlers.GetPrivateConversationHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/group/{groupID}", chatHandlers.GetGroupConversationHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/can-message/{userID}", chatHandlers.CheckCanMessageHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/search-users", chatHandlers.SearchUsersHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/send", chatHandlers.SendMessageHandler).Methods("POST", "OPTIONS")
 
 	// The router with all its middleware and handlers is now complete.
 	return router

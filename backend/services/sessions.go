@@ -6,9 +6,10 @@ import (
 
 	"social-network/database/models"
 
-	"github.com/google/uuid"
 	"io"
 	"os"
+
+	"github.com/google/uuid"
 )
 
 type contextKey string
@@ -56,6 +57,11 @@ func GetUserFromSession(r *http.Request) (*models.User, error) {
 	}
 
 	sessionToken := cookie.Value
+	return GetUserFromSessionToken(sessionToken)
+}
+
+// GetUserFromSessionToken retrieves the user associated with a session token.
+func GetUserFromSessionToken(sessionToken string) (*models.User, error) {
 	session, err := models.GetSessionByToken(sessionToken)
 	if err != nil {
 		return nil, err // Database error

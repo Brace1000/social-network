@@ -102,14 +102,25 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 	}
 	messageBytes, _ := json.Marshal(outgoingMsg)
 
-	// AUDIT POINT: Send the message ONLY to the recipient's clients.
-	if recipientClients, ok := h.clients[recipientID]; ok {
-		for client := range recipientClients {
-			client.send <- messageBytes
+	// Check if recipient should receive instant messages
+	shouldReceiveInstant, err := models.ShouldReceiveInstantMessage(senderID, recipientID)
+	if err != nil {
+		log.Printf("Error checking instant message permissions for %s -> %s: %v", senderID, recipientID, err)
+		shouldReceiveInstant = false // Default to not sending instant messages on error
+	}
+
+	// Send the message to the recipient's clients only if they should receive instant messages
+	if shouldReceiveInstant {
+		if recipientClients, ok := h.clients[recipientID]; ok {
+			for client := range recipientClients {
+				client.send <- messageBytes
+			}
+			log.Printf("Sent instant private message from %s to %s", senderID, recipientID)
+		} else {
+			log.Printf("Recipient %s is not online. Message saved to DB (instant delivery allowed).", recipientID)
 		}
-		log.Printf("Sent private message from %s to %s", senderID, recipientID)
 	} else {
-		log.Printf("Recipient %s is not online. Message saved to DB.", recipientID)
+		log.Printf("Recipient %s will not receive instant message from %s (no follow relationship and private profile). Message saved to DB.", recipientID, senderID)
 	}
 
 	// Also send the message back to the sender's other devices.
@@ -318,5 +329,40 @@ func (h *Hub) SendUserListUpdate(userID string) {
 	} else {
 		// User is not online, update will be handled when they connect
 		// (removed debug log to reduce noise)
+	}
+}
+
+// SendMessageToUser sends a message directly to a specific user if they're online
+func (h *Hub) SendMessageToUser(userID string, message *models.Message) {
+	// Check if the target user is online
+	if userClients, ok := h.clients[userID]; ok {
+		// Create the message payload
+		messagePayload := struct {
+			Type string          `json:"type"`
+			Data *models.Message `json:"data"`
+		}{
+			Type: "message",
+			Data: message,
+		}
+
+		// Marshal to JSON
+		jsonData, err := json.Marshal(messagePayload)
+		if err != nil {
+			log.Printf("Error marshaling message to JSON: %v", err)
+			return
+		}
+
+		// Send to all clients of this user
+		for client := range userClients {
+			select {
+			case client.send <- jsonData:
+			default:
+				close(client.send)
+				delete(userClients, client)
+				if len(userClients) == 0 {
+					delete(h.clients, userID)
+				}
+			}
+		}
 	}
 }

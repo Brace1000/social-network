@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"social-network/database"
+	"social-network/database/models"
+	"social-network/services"
 )
 
 // Define a new type for our context key to avoid collisions.
@@ -46,18 +48,39 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		log.Printf("AuthMiddleware: Successfully authenticated user ID: %s", userID)
 
-		// 4. Add the string user ID to the context (don't convert to int!)
-		ctx := context.WithValue(r.Context(), "userID", userID) // userID should be a string (UUID)
-next.ServeHTTP(w, r.WithContext(ctx))
+		// 4. Fetch the full user object from the database
+		user, err := models.GetUserByID(userID)
+		if err != nil || user == nil {
+			log.Printf("AuthMiddleware: Failed to get user by ID '%s', error: %v", userID, err)
+			respondWithError(w, http.StatusUnauthorized, "User not found")
+			return
+		}
+
+		// 5. Add the full user object to the context using the services context key
+		ctx := context.WithValue(r.Context(), services.UserContextKey, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// Your CORS middleware is fine and does not need changes.
+// CORS middleware with support for multiple frontend ports
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		origin := r.Header.Get("Origin")
+
+		// Allow only port 3000 for development
+		allowedOrigins := []string{
+			"http://localhost:3000",
+		}
+
+		for _, allowedOrigin := range allowedOrigins {
+			if origin == allowedOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				break
+			}
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie") // Add Cookie to allowed headers
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == "OPTIONS" {
