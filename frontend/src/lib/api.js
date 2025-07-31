@@ -114,6 +114,8 @@ export const followAPI = {
   declineFollowRequest: (requestId) => apiCall(`/follow-requests/${requestId}/decline`, 'POST'),
   
   cancelFollowRequest: (requestId) => apiCall(`/follow-requests/${requestId}/cancel`, 'POST'),
+
+  checkFollowStatus: (userId) => apiCall(`/follow-status/${userId}`),
 };
 
 // Notification-related API calls
@@ -123,11 +125,24 @@ export const notificationAPI = {
   markAsRead: (notificationId) => apiCall(`/notifications/${notificationId}/read`, 'POST'),
 };
 
+// Chat-related API calls
+export const chatAPI = {
+  getConversations: () => apiCall('/chats/conversations'),
+
+  getPrivateConversation: (userId) => apiCall(`/chats/private/${userId}`),
+
+  getGroupConversation: (groupId) => apiCall(`/chats/group/${groupId}`),
+
+  canMessage: (userId) => apiCall(`/chats/can-message/${userId}`),
+
+  searchUsers: (query) => apiCall(`/chats/search-users?q=${encodeURIComponent(query)}`),
+};
+
 // Auth-related API calls
 export const authAPI = {
   register: (data) => apiCall('/register', 'POST', data),
-  
+
   login: (data) => apiCall('/login', 'POST', data),
-  
+
   logout: () => apiCall('/logout', 'POST'),
 };
