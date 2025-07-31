@@ -48,29 +48,60 @@ func SaveMessage(msg *Message) error {
 }
 
 // CanUsersMessage checks if two users are allowed to chat.
-// This directly addresses the audit requirement.
+// Rules: Users can message if at least one follows the other (one-way follow is sufficient).
 func CanUsersMessage(senderID, recipientID string) (bool, error) {
 	// A user can always message themselves.
 	if senderID == recipientID {
 		return true, nil
 	}
 
-	// Logic: A chat is allowed if they follow each other.
+	// Check if at least one user follows the other (one-way relationship is sufficient)
 	var count int
 	query := `
-		SELECT COUNT(*) FROM followers f1
-		JOIN followers f2 ON f1.follower_id = f2.followed_id AND f1.followed_id = f2.follower_id
-		WHERE f1.follower_id = ? AND f1.followed_id = ? AND f1.status = 'accepted' AND f2.status = 'accepted'
+		SELECT COUNT(*) FROM followers
+		WHERE (follower_id = ? AND following_id = ?) OR (follower_id = ? AND following_id = ?)
 	`
-	err := database.DB.QueryRow(query, senderID, recipientID).Scan(&count)
+	err := database.DB.QueryRow(query, senderID, recipientID, recipientID, senderID).Scan(&count)
 	if err != nil {
 		return false, err
 	}
 
-	// NOTE: You could add logic here to check if the recipient's profile is public.
-	
-
 	return count > 0, nil
+}
+
+// ShouldReceiveInstantMessage checks if a recipient should receive instant WebSocket messages.
+// Rules: Recipient receives instantly if they follow the sender OR have a public profile.
+func ShouldReceiveInstantMessage(senderID, recipientID string) (bool, error) {
+	// A user always receives their own messages instantly
+	if senderID == recipientID {
+		return true, nil
+	}
+
+	// Check if recipient follows sender
+	var recipientFollowsSender int
+	followQuery := `
+		SELECT COUNT(*) FROM followers
+		WHERE follower_id = ? AND following_id = ?
+	`
+	err := database.DB.QueryRow(followQuery, recipientID, senderID).Scan(&recipientFollowsSender)
+	if err != nil {
+		return false, err
+	}
+
+	// If recipient follows sender, they get instant messages
+	if recipientFollowsSender > 0 {
+		return true, nil
+	}
+
+	// Check if recipient has a public profile
+	var isPublic bool
+	publicQuery := `SELECT is_public FROM users WHERE id = ?`
+	err = database.DB.QueryRow(publicQuery, recipientID).Scan(&isPublic)
+	if err != nil {
+		return false, err
+	}
+
+	return isPublic, nil
 }
 
 // IsUserInGroup checks if a user is a member of a group.
