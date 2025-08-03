@@ -25,6 +25,115 @@ export default function ProfilePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { myFollowRequests } = useMyFollowRequests();
 
+  // FollowerButton component for followers section
+  const FollowerButton = ({ user, isOwner, onActionComplete }) => {
+    console.log('FollowerButton rendering for user:', user.firstName, user.lastName);
+    const [loading, setLoading] = useState(false);
+    const [isFollowingBack, setIsFollowingBack] = useState(false);
+
+    // Check if we're following this follower back
+    useEffect(() => {
+      const checkFollowStatus = async () => {
+        try {
+          const response = await followAPI.checkFollowStatus(user.id);
+          setIsFollowingBack(response.status === 'following');
+        } catch (error) {
+          console.error('Error checking follow status:', error);
+          setIsFollowingBack(false);
+        }
+      };
+      checkFollowStatus();
+    }, [user.id]);
+
+    const handleAction = async () => {
+      setLoading(true);
+      try {
+        if (isFollowingBack) {
+          await followAPI.unfollowUser(user.id);
+          setIsFollowingBack(false);
+        } else {
+          await followAPI.followUser(user.id);
+          setIsFollowingBack(true);
+        }
+        onActionComplete();
+      } catch (error) {
+        console.error('Follow action failed:', error);
+        alert(`Failed to ${isFollowingBack ? 'unfollow' : 'follow'} user`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Always show button for testing
+    // if (isOwner) return null;
+
+    return (
+      <button
+        style={{
+          backgroundColor: isFollowingBack ? '#f44336' : '#4CAF50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '8px 16px',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          opacity: loading ? 0.6 : 1,
+          whiteSpace: 'nowrap',
+          minWidth: '100px'
+        }}
+        onClick={handleAction}
+        disabled={loading}
+      >
+        {loading ? 'Loading...' : (isFollowingBack ? 'Unfollow' : 'Follow Back')}
+      </button>
+    );
+  };
+
+  // UnfollowButton component for following section
+  const UnfollowButton = ({ user, isOwner, onActionComplete }) => {
+    console.log('UnfollowButton rendering for user:', user.firstName, user.lastName);
+    const [loading, setLoading] = useState(false);
+
+    const handleUnfollow = async () => {
+      setLoading(true);
+      try {
+        await followAPI.unfollowUser(user.id);
+        onActionComplete();
+      } catch (error) {
+        console.error('Unfollow failed:', error);
+        alert('Failed to unfollow user');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Always show button for testing
+    // if (isOwner) return null;
+
+    return (
+      <button
+        style={{
+          backgroundColor: '#f44336',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '8px 16px',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          opacity: loading ? 0.6 : 1,
+          whiteSpace: 'nowrap',
+          minWidth: '100px'
+        }}
+        onClick={handleUnfollow}
+        disabled={loading}
+      >
+        {loading ? 'Loading...' : 'Unfollow'}
+      </button>
+    );
+  };
+
   // Check follow status function
   const checkFollowStatus = async () => {
     if (!isAuthenticated || !user || isOwner) return;
@@ -89,6 +198,9 @@ export default function ProfilePage() {
     const { myFollowRequests, cancelFollowRequest, refresh: refreshMyFollowRequests } = useMyFollowRequests();
 
     const fetchUsers = useCallback(async () => {
+      // Don't fetch users until we have profile data
+      if (!profile) return;
+
       try {
         setLoading(true);
         setError('');
@@ -101,12 +213,39 @@ export default function ProfilePage() {
           return;
         }
         
-        // Just use the users as they are, without follow status
-        const usersWithStatus = response.map(user => ({
-          ...user,
-          isFollowing: false // Default to not following
-        }));
-        
+        // Filter out users who are already in followers/following lists
+        const followerIds = new Set(profile?.followers?.map(f => f.id) || []);
+        const followingIds = new Set(profile?.following?.map(f => f.id) || []);
+
+        const filteredUsers = response.filter(user => {
+          // Skip the current profile owner
+          if (user.id === userId) return false;
+
+          // Skip users who are already followers or following
+          if (followerIds.has(user.id) || followingIds.has(user.id)) return false;
+
+          return true;
+        });
+
+        // Check follow status for remaining users (for "People You May Know")
+        const usersWithStatus = await Promise.all(
+          filteredUsers.map(async (user) => {
+            try {
+              const statusResponse = await followAPI.checkFollowStatus(user.id);
+              const followStatus = statusResponse.status;
+
+              return {
+                ...user,
+                isFollowing: followStatus === 'following' ? true :
+                           followStatus === 'request_sent' ? 'request_sent' : false
+              };
+            } catch (error) {
+              console.error(`Error checking follow status for user ${user.id}:`, error);
+              return { ...user, isFollowing: false };
+            }
+          })
+        );
+
         setUsers(usersWithStatus);
         if (usersWithStatus.length === 0) {
           setError('No users found');
@@ -118,7 +257,7 @@ export default function ProfilePage() {
       } finally {
         setLoading(false);
       }
-    }, []);
+    }, [profile]);
 
     useEffect(() => {
       fetchUsers();
@@ -139,25 +278,30 @@ export default function ProfilePage() {
             // Update the user's follow status based on their profile privacy
             const user = users.find(u => u.id === userId);
             if (user && user.isPublic) {
-              setUsers(prev => prev.map(u => 
+              setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: true } : u
               ));
             } else {
               // For private profiles, show "Request Sent" status
-              setUsers(prev => prev.map(u => 
+              setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: 'request_sent' } : u
               ));
               // Refresh my follow requests list to include the new request
               await refreshMyFollowRequests();
             }
           } catch (followError) {
-            // If the error is "Follow request already sent", update the status
+            // Handle various follow errors
             if (followError.message && followError.message.includes('Follow request already sent')) {
-              setUsers(prev => prev.map(u => 
+              setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: 'request_sent' } : u
               ));
               // Refresh my follow requests list
               await refreshMyFollowRequests();
+            } else if (followError.message && followError.message.includes('Already following this user')) {
+              // User is already following - update the UI to reflect this
+              setUsers(prev => prev.map(u =>
+                u.id === userId ? { ...u, isFollowing: true } : u
+              ));
             } else {
               throw followError; // Re-throw other errors
             }
@@ -400,9 +544,12 @@ export default function ProfilePage() {
             setFollowStatus('request_sent');
           }
         } catch (followError) {
-          // If the error is "Follow request already sent", update the status
+          // Handle various follow errors
           if (followError.message && followError.message.includes('Follow request already sent')) {
             setFollowStatus('request_sent');
+          } else if (followError.message && followError.message.includes('Already following this user')) {
+            // User is already following - update the status
+            setFollowStatus('following');
           } else {
             throw followError; // Re-throw other errors
           }
@@ -509,10 +656,10 @@ export default function ProfilePage() {
         borderBottom: '1px solid #a03a12',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
-        <Link href="/home" className="nav-link" style={{ 
-          textDecoration: 'none', 
-          color: '#fff', 
-          fontSize: '20px', 
+        <Link href="/home" className="nav-link" style={{
+          textDecoration: 'none',
+          color: '#fff',
+          fontSize: '20px',
           fontWeight: 'bold',
           display: 'flex',
           alignItems: 'center',
@@ -521,8 +668,27 @@ export default function ProfilePage() {
           <span style={{ fontSize: '24px' }}>←</span>
           Social Network
         </Link>
-        <div style={{ color: '#fff', fontSize: '16px' }}>
-          Profile
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Link
+            href="/messages"
+            style={{
+              color: '#fff',
+              textDecoration: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              transition: 'background-color 0.2s',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+          >
+            Messages
+          </Link>
+          <div style={{ color: '#fff', fontSize: '16px' }}>
+            Profile
+          </div>
         </div>
       </nav>
 
@@ -806,40 +972,50 @@ export default function ProfilePage() {
                       <div key={user.id} className="card-smooth" style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '12px',
                         padding: '12px',
                         borderRadius: '8px',
                         background: '#fff',
                         border: '1px solid #eee'
                       }}>
-                        <img 
-                          src={user.avatarPath ? `/${user.avatarPath}` : '/user.png'} 
-                          alt="avatar" 
-                          className="profile-image"
-                          style={{ 
-                            width: '40px', 
-                            height: '40px', 
-                            borderRadius: '50%', 
-                            objectFit: 'cover' 
-                          }} 
-                        />
-                        <div>
-                          <div style={{ 
-                            fontWeight: '600', 
-                            fontSize: '15px',
-                            color: '#050505'
-                          }}>
-                            {user.firstName} {user.lastName}
-                          </div>
-                          {user.nickname && (
-                            <div style={{ 
-                              fontSize: '13px', 
-                              color: '#65676b' 
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                          <img
+                            src={user.avatarPath ? `/${user.avatarPath}` : '/user.png'}
+                            alt="avatar"
+                            className="profile-image"
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <div>
+                            <div style={{
+                              fontWeight: '600',
+                              fontSize: '15px',
+                              color: '#050505'
                             }}>
-                              @{user.nickname}
+                              {user.firstName} {user.lastName}
                             </div>
-                          )}
+                            {user.nickname && (
+                              <div style={{
+                                fontSize: '13px',
+                                color: '#65676b'
+                              }}>
+                                @{user.nickname}
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Follow Back / Unfollow button for followers */}
+                        <FollowerButton
+                          user={user}
+                          isOwner={isOwner}
+                          onActionComplete={() => fetchProfile()}
+                        />
                       </div>
                     ))}
                   </div>
@@ -872,40 +1048,50 @@ export default function ProfilePage() {
                       <div key={user.id} className="card-smooth" style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '12px',
                         padding: '12px',
                         borderRadius: '8px',
                         background: '#fff',
                         border: '1px solid #eee'
                       }}>
-                        <img 
-                          src={user.avatarPath ? `/${user.avatarPath}` : '/user.png'} 
-                          alt="avatar" 
-                          className="profile-image"
-                          style={{ 
-                            width: '40px', 
-                            height: '40px', 
-                            borderRadius: '50%', 
-                            objectFit: 'cover' 
-                          }} 
-                        />
-                        <div>
-                          <div style={{ 
-                            fontWeight: '600', 
-                            fontSize: '15px',
-                            color: '#050505'
-                          }}>
-                            {user.firstName} {user.lastName}
-                          </div>
-                          {user.nickname && (
-                            <div style={{ 
-                              fontSize: '13px', 
-                              color: '#65676b' 
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                          <img
+                            src={user.avatarPath ? `/${user.avatarPath}` : '/user.png'}
+                            alt="avatar"
+                            className="profile-image"
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <div>
+                            <div style={{
+                              fontWeight: '600',
+                              fontSize: '15px',
+                              color: '#050505'
                             }}>
-                              @{user.nickname}
+                              {user.firstName} {user.lastName}
                             </div>
-                          )}
+                            {user.nickname && (
+                              <div style={{
+                                fontSize: '13px',
+                                color: '#65676b'
+                              }}>
+                                @{user.nickname}
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Unfollow button for following */}
+                        <UnfollowButton
+                          user={user}
+                          isOwner={isOwner}
+                          onActionComplete={() => fetchProfile()}
+                        />
                       </div>
                     ))}
                   </div>

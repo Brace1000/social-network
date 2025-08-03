@@ -220,6 +220,23 @@ export default function HomePage() {
           Social Network
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Link
+            href="/messages"
+            style={{
+              color: '#fff',
+              textDecoration: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              transition: 'background-color 0.2s',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+          >
+            Messages
+          </Link>
           <NotificationDropdown />
           <LogoutForm />
         </div>
@@ -258,6 +275,23 @@ export default function HomePage() {
           Social Network
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Link
+            href="/messages"
+            style={{
+              color: '#fff',
+              textDecoration: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              transition: 'background-color 0.2s',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+          >
+            Messages
+          </Link>
           <NotificationDropdown />
           <LogoutForm />
         </div>
@@ -303,6 +337,23 @@ export default function HomePage() {
           Social Network
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Link
+            href="/messages"
+            style={{
+              color: '#fff',
+              textDecoration: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              transition: 'background-color 0.2s',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+          >
+            Messages
+          </Link>
           <NotificationDropdown />
           <LogoutForm />
         </div>
