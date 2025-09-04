@@ -170,6 +170,11 @@ const styles = {
 };
 
 export default function NotificationDropdown() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [processingRequests, setProcessingRequests] = useState(new Set());
+  const dropdownRef = useRef(null);
+  const router = useRouter();
+
   const { 
     followRequests, 
     loading: followRequestsLoading, 
@@ -182,29 +187,8 @@ export default function NotificationDropdown() {
     markAsRead,
     unreadCount: notificationsUnreadCount
   } = useNotifications();
-  
-  // Calculate total unread count (follow requests + notifications)
-  const followRequestsCount = Array.isArray(followRequests) ? followRequests.length : 0;
-  const totalUnreadCount = followRequestsCount + notificationsUnreadCount;
-  
-  // Clear all follow requests (this would need backend support)
-  const clearAll = () => {
-    // For now, this is a placeholder. In a real app, you might want to
-    // implement bulk accept/decline functionality
-    console.log('Clear all functionality not implemented');
-  };
-  
-  // Don't render if we're not in a browser environment
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  
-  const [isOpen, setIsOpen] = useState(false);
-  const [processingRequests, setProcessingRequests] = useState(new Set());
-  const dropdownRef = useRef(null);
-  const router = useRouter();
 
-  // Close dropdown when clicking outside
+   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -212,10 +196,29 @@ export default function NotificationDropdown() {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  if (isOpen) {
+    document.addEventListener("mousedown", handleClickOutside);
+  }
 
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+  }, [isOpen]);
+
+     // Don't render if we're not in a browser environment
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  // Calculate total unread count (follow requests + notifications)
+  const followRequestsCount = Array.isArray(followRequests) ? followRequests.length : 0;
+  const totalUnreadCount = followRequestsCount + notificationsUnreadCount;
+  
+
+  const clearAll = () => {
+    console.log('Clear all functionality not implemented');
+  };
+  
   const handleRequestAction = async (requestId, action) => {
     try {
       setProcessingRequests(prev => new Set(prev).add(requestId));

@@ -36,7 +36,7 @@ export default function MessagesPage() {
     if (isAuthenticated) {
       loadConversations();
     }
-  }, [isAuthenticated]); // Removed loadConversations from dependencies to prevent infinite loop
+  }, [isAuthenticated, loadConversations]); 
 
   // Handle conversation selection
   const handleConversationSelect = (conversation) => {

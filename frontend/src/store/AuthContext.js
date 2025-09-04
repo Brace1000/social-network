@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setError(null); // Don't set error for expected unauthorized state
       } else {
-        console.error('Authentication check failed:', err.message);
+       // console.error('Authentication check failed:', err.message);
         setUser(null);
         setError(err.message);
       }

@@ -1,5 +1,5 @@
 'use client';
-
+import Image from "next/image";
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -138,7 +138,7 @@ const ProfileButton = ({ profile, onNavigate }) => {
     // Add a small delay to show the click effect before navigation
     setTimeout(() => {
       router.push(`/profile/${profile.id}`);
-      onNavigate(); // Notify parent that navigation is starting
+      onNavigate(); 
     }, 150);
   };
 
@@ -149,18 +149,20 @@ const ProfileButton = ({ profile, onNavigate }) => {
         onClick={handleProfileClick}
         style={{ textDecoration: 'none' }}
       >
-        <img 
-          src={profile.avatarPath ? `/${profile.avatarPath}` : '/user.png'} 
-          alt="avatar" 
-          className={`profile-image ${isClicked ? 'profile-clicked' : ''}`}
-          style={{ 
-            ...styles.avatar, 
-            cursor: 'pointer',
-            transform: isClicked ? 'scale(0.95)' : 'scale(1)',
-            transition: 'transform 0.15s ease-in-out'
-          }}
-          title="Click to view profile"
-        />
+      <Image
+  src={profile.avatarPath ? `/${profile.avatarPath}` : "/user.png"}
+  alt="avatar"
+  width={100} 
+  height={100} 
+  className={`profile-image ${isClicked ? "profile-clicked" : ""}`}
+  style={{
+    ...styles.avatar,
+    cursor: "pointer",
+    transform: isClicked ? "scale(0.95)" : "scale(1)",
+    transition: "transform 0.15s ease-in-out",
+  }}
+  title="Click to view profile"
+/>
       </a>
     </div>
   );
@@ -174,14 +176,13 @@ export default function HomePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const router = useRouter();
 
-  // Always call hooks at the top level!
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
       router.push('/auth/login');
     }
   }, [isAuthenticated, authLoading, router]);
 
-  // Show loading while checking authentication
+ 
   if (authLoading) return (
     <div className="page-enter" style={{ 
       display: 'flex', 
@@ -306,7 +307,6 @@ export default function HomePage() {
 
   return (
     <div className="page-enter" style={styles.container}>
-      {/* Navigation overlay */}
       {isNavigating && (
         <div 
           className="nav-preload active"
@@ -331,7 +331,6 @@ export default function HomePage() {
         </div>
       )}
       
-      {/* Navbar */}
       <nav style={styles.navbar}>
         <div style={styles.navbarTitle}>
           Social Network
@@ -359,9 +358,7 @@ export default function HomePage() {
         </div>
       </nav>
       
-      {/* Main Content */}
       <div style={styles.mainContent}>
-        {/* Profile Section */}
         <div style={styles.sidebar}>
           <div style={{ marginBottom: '20px' }}>
             <ProfileButton profile={profile} onNavigate={() => setIsNavigating(true)} />
@@ -370,12 +367,10 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Edit Profile Modal */}
       <EditProfile 
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onProfileUpdated={() => {
-          // Refresh the profile data after successful update
           window.location.reload();
         }}
       />

@@ -1,127 +1,154 @@
 "use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { useAuth } from '../../store/AuthContext';
-import { useRouter } from 'next/navigation';
+import React, { useState } from "react";
+import Link from "next/link";
+import { useAuth } from "../../store/AuthContext";
+import { useRouter } from "next/navigation";
 
 export default function LoginForm({ onSuccess, onError }) {
   const { login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      await login(email, password);
+      await login(form.email, form.password);
       if (onSuccess) {
         onSuccess();
       } else {
-        router.push('/home');
+        router.push("/home");
       }
     } catch (err) {
-      setError(err.message || 'Wrong email or password');
-      if (onError) onError(err.message || 'Wrong email or password');
+      setError(err.message || "Wrong email or password");
+      if (onError) onError(err.message || "Wrong email or password");
     } finally {
       setLoading(false);
     }
   };
 
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 14px",
+    border: "1px solid #ccc",
+    borderRadius: 8,
+    fontSize: 15,
+    outline: "none",
+    marginTop: 6,
+    boxSizing: "border-box",
+  };
+
+  const labelStyle = {
+    fontWeight: 500,
+    fontSize: 14,
+    marginBottom: 4,
+    display: "block",
+  };
+
+  const buttonStyle = {
+    width: "100%",
+    background: "#f97316",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "12px 0",
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: "pointer",
+  };
+
   return (
-    <div style={{ maxWidth: 400, margin: '2rem auto', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', padding: 32 }}>
-      {/* Added Login Title */}
-      <h1 style={{
-        textAlign: 'center',
-        color: '#b74115',
-        fontSize: '28px',
-        fontWeight: '600',
-        marginBottom: '24px'
-      }}>
+    <div
+      style={{
+        maxWidth: 420,
+        margin: "2rem auto",
+        background: "#fff",
+        borderRadius: 12,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
+        padding: 32,
+      }}
+    >
+      <h1
+        style={{
+          textAlign: "center",
+          fontSize: "22px",
+          fontWeight: 700,
+          marginBottom: 6,
+        }}
+      >
         Login
       </h1>
-      
+      <p style={{ textAlign: "center", marginBottom: 24, color: "#666" }}>
+        Welcome back! Please enter your details.
+      </p>
+
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Email*</label>
           <input
-            type="text"
-            placeholder="Enter your email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              border: '2px solid #c44a1b',
-              borderRadius: 8,
-              fontSize: 16,
-              outline: 'none',
-              marginBottom: 8,
-              boxSizing: 'border-box',
-            }}
+            style={inputStyle}
           />
         </div>
-        <div style={{ marginBottom: 16, position: 'relative' }}>
+
+        <div style={{ marginBottom: 16, position: "relative" }}>
+          <label style={labelStyle}>Password*</label>
           <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
+            type={showPassword ? "text" : "password"}
+            name="password"
+            value={form.password}
+            onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '12px 40px 12px 16px',
-              border: '2px solid #e0e0e0',
-              borderRadius: 8,
-              fontSize: 16,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
+            style={{ ...inputStyle, paddingRight: 40 }}
           />
-          {/* Password icon (lock) */}
-          <span style={{
-            position: 'absolute',
-            right: 12,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#c44a1b',
-            fontSize: 20,
-            pointerEvents: 'none',
-          }}>
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path fill="#c44a1b" d="M17 10V7a5 5 0 0 0-10 0v3H5v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10h-2Zm-8-3a3 3 0 1 1 6 0v3H9V7Zm8 13H7V12h10v8Zm-5-3a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
+          <span
+            onClick={() => setShowPassword(!showPassword)}
+            style={{
+              position: "absolute",
+              right: 12,
+              top: 38,
+              cursor: "pointer",
+              color: "#f97316",
+            }}
+          >
+            {showPassword ? "🙈" : "👁️"}
           </span>
         </div>
-        <div style={{ textAlign: 'center', marginBottom: 24, fontSize: 15 }}>
-          Don&apos;t have an account?{' '}
-          <Link href="/auth/register" style={{ color: '#111', fontWeight: 600, textDecoration: 'none' }}>Sign Up</Link>
-        </div>
-        {error && <div style={{ color: 'red', marginBottom: 8, textAlign: 'center' }}>{error}</div>}
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            background: '#b74115',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 999,
-            padding: '14px 0',
-            fontSize: 18,
-            fontWeight: 600,
-            cursor: 'pointer',
-            marginTop: 8,
-            marginBottom: 8,
-            boxShadow: '0 2px 4px rgba(180,65,21,0.08)',
-            transition: 'background 0.2s',
-          }}
-        >
-          {loading ? 'Logging in...' : 'Login'}
+
+        {error && (
+          <div style={{ color: "red", marginBottom: 12, textAlign: "center" }}>
+            {error}
+          </div>
+        )}
+
+        <button type="submit" disabled={loading} style={buttonStyle}>
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
+
+      <div style={{ textAlign: "center", marginTop: 16, fontSize: 15 }}>
+        Don&apos;t have an account?{" "}
+        <Link
+          href="/auth/register"
+          style={{ color: "#111", fontWeight: 600, textDecoration: "none" }}
+        >
+          Sign Up
+        </Link>
+      </div>
     </div>
   );
 }

@@ -64,9 +64,6 @@ export default function ProfilePage() {
       }
     };
 
-    // Always show button for testing
-    // if (isOwner) return null;
-
     return (
       <button
         style={{
@@ -107,9 +104,6 @@ export default function ProfilePage() {
         setLoading(false);
       }
     };
-
-    // Always show button for testing
-    // if (isOwner) return null;
 
     return (
       <button
@@ -177,7 +171,6 @@ export default function ProfilePage() {
         setError('This profile is private.');
         setProfile(null);
       } else if (err.message.includes('401')) {
-        // Redirect to login page if not authenticated
         router.push('/auth/login');
         return;
       } else {
@@ -198,7 +191,6 @@ export default function ProfilePage() {
     const { myFollowRequests, cancelFollowRequest, refresh: refreshMyFollowRequests } = useMyFollowRequests();
 
     const fetchUsers = useCallback(async () => {
-      // Don't fetch users until we have profile data
       if (!profile) return;
 
       try {
@@ -213,15 +205,12 @@ export default function ProfilePage() {
           return;
         }
         
-        // Filter out users who are already in followers/following lists
         const followerIds = new Set(profile?.followers?.map(f => f.id) || []);
         const followingIds = new Set(profile?.following?.map(f => f.id) || []);
 
         const filteredUsers = response.filter(user => {
-          // Skip the current profile owner
           if (user.id === userId) return false;
 
-          // Skip users who are already followers or following
           if (followerIds.has(user.id) || followingIds.has(user.id)) return false;
 
           return true;
@@ -275,35 +264,30 @@ export default function ProfilePage() {
         } else {
           try {
             await followAPI.followUser(userId);
-            // Update the user's follow status based on their profile privacy
             const user = users.find(u => u.id === userId);
             if (user && user.isPublic) {
               setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: true } : u
               ));
             } else {
-              // For private profiles, show "Request Sent" status
               setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: 'request_sent' } : u
               ));
-              // Refresh my follow requests list to include the new request
               await refreshMyFollowRequests();
             }
           } catch (followError) {
-            // Handle various follow errors
             if (followError.message && followError.message.includes('Follow request already sent')) {
               setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: 'request_sent' } : u
               ));
-              // Refresh my follow requests list
+           
               await refreshMyFollowRequests();
             } else if (followError.message && followError.message.includes('Already following this user')) {
-              // User is already following - update the UI to reflect this
               setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, isFollowing: true } : u
               ));
             } else {
-              throw followError; // Re-throw other errors
+              throw followError; 
             }
           }
         }
@@ -522,11 +506,9 @@ export default function ProfilePage() {
     setFollowLoading(true);
     try {
       if (followStatus === 'following') {
-        // Unfollow
         await followAPI.unfollowUser(userId);
         setFollowStatus('not_following');
       } else if (followStatus === 'request_sent') {
-        // Cancel follow request
         const followRequest = myFollowRequests.find(req => req.recipient.id === userId);
         if (followRequest) {
           await followAPI.cancelFollowRequest(followRequest.id);
@@ -535,7 +517,6 @@ export default function ProfilePage() {
           alert('Follow request not found. Please refresh the page.');
         }
       } else {
-        // Follow or send request
         try {
           await followAPI.followUser(userId);
           if (profile.isPublic) {
@@ -544,14 +525,13 @@ export default function ProfilePage() {
             setFollowStatus('request_sent');
           }
         } catch (followError) {
-          // Handle various follow errors
+    
           if (followError.message && followError.message.includes('Follow request already sent')) {
             setFollowStatus('request_sent');
           } else if (followError.message && followError.message.includes('Already following this user')) {
-            // User is already following - update the status
             setFollowStatus('following');
           } else {
-            throw followError; // Re-throw other errors
+            throw followError; 
           }
         }
       }
@@ -641,7 +621,7 @@ export default function ProfilePage() {
       background: '#f0f2f5',
       animation: 'slideInFromRight 0.4s ease-out'
     }}>
-      {/* Navigation Bar */}
+
       <nav style={{
         position: 'fixed',
         top: 0,
@@ -692,9 +672,7 @@ export default function ProfilePage() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <div style={{ paddingTop: '80px' }}>
-        {/* Profile Header */}
         <div style={{
           background: '#fff',
           borderBottom: '1px solid #ddd',
@@ -837,13 +815,11 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Profile Content */}
         <div style={{
           maxWidth: '1000px',
           margin: '0 auto',
           padding: '32px'
         }}>
-          {/* Tabs */}
           <div style={{ 
             display: 'flex', 
             gap: '48px', 
@@ -920,7 +896,6 @@ export default function ProfilePage() {
              </button>
           </div>
 
-          {/* Tab Content */}
           <div className="card-smooth" style={{ 
             background: '#fff', 
             borderRadius: '8px', 
@@ -1010,7 +985,6 @@ export default function ProfilePage() {
                           </div>
                         </div>
 
-                        {/* Follow Back / Unfollow button for followers */}
                         <FollowerButton
                           user={user}
                           isOwner={isOwner}
@@ -1115,18 +1089,14 @@ export default function ProfilePage() {
            </div>
          </div>
       </div>
-
-      {/* Edit Profile Modal */}
       <EditProfile 
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onProfileUpdated={() => {
-          // Refresh the profile data after successful update
           try {
             fetchProfile();
           } catch (error) {
             console.error('Error refreshing profile:', error);
-            // Silently handle the error to avoid pop-ups
           }
         }}
       />
@@ -1134,5 +1104,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-
