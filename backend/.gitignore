@@ -1,3 +1,2 @@
-/forum.db
-.qodo
-/social_network.db
+*.qodo
+*.db
