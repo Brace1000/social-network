@@ -8,40 +8,27 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// SetupRouter configures all the API routes for the application.
 func SetupRouter(hub *websocket.Hub) http.Handler {
-	// Instantiate all handler groups
 	userHandlers := NewUserHandlers(hub)
 	postHandlers := NewPostHandlers()
 	chatHandlers := NewChatHandlers(hub)
 
-	// Create the main router
 	router := mux.NewRouter()
 
 	router.Use(CORSMiddleware)
-
-	// --- All subsequent routes are attached to the CORS-aware router ---
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 
-	// --- Public Routes ---
-	// These routes do not need authentication but will still have CORS headers.
 	apiRouter.HandleFunc("/register", userHandlers.RegisterHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/login", userHandlers.LoginHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/logout", userHandlers.LogoutHandler).Methods("POST", "OPTIONS")
 
-	// --- WebSocket Route ---
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(hub, w, r)
 	})
 
-	// --- Protected Routes Group ---
-	// Create a sub-router for all routes that require authentication.
 	auth := apiRouter.PathPrefix("").Subrouter()
-	// Now, apply the AuthMiddleware. It will run AFTER the CORS middleware.
 	auth.Use(AuthMiddleware)
 
-	// --- Attach all protected handlers to the `auth` sub-router ---
-	// User & Follower Routes
 	auth.HandleFunc("/me", userHandlers.CurrentUserHandler).Methods("GET", "OPTIONS")
 	auth.HandleFunc("/users", userHandlers.GetAllUsersHandler).Methods("GET", "OPTIONS")
 	auth.HandleFunc("/follow/{userId}", userHandlers.FollowRequestHandler).Methods("POST", "OPTIONS")
@@ -80,6 +67,5 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	auth.HandleFunc("/chats/search-users", chatHandlers.SearchUsersHandler).Methods("GET", "OPTIONS")
 	auth.HandleFunc("/chats/send", chatHandlers.SendMessageHandler).Methods("POST", "OPTIONS")
 
-	// The router with all its middleware and handlers is now complete.
 	return router
 }

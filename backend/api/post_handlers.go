@@ -15,10 +15,9 @@ import (
 
 // LikeRequest defines the structure for a like/dislike request body.
 type LikeRequest struct {
-	LikeType int `json:"like_type"` // 1 for like, -1 for dislike, 0 to remove vote
+	LikeType int `json:"like_type"`
 }
 
-// PostHandlers holds dependencies for post-related handlers.
 type PostHandlers struct{}
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
@@ -56,21 +55,15 @@ func (h *PostHandlers) LikePostHandler(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-
-	// Validate like_type
 	if req.LikeType < -1 || req.LikeType > 1 {
 		respondWithError(w, http.StatusBadRequest, "Invalid like_type value. Must be -1, 0, or 1.")
 		return
 	}
-
-	// Check if user has permission to view the post (and thus like it)
 	canView, err := CanUserViewPost(userID, postID)
 	if err != nil || !canView {
 		respondWithError(w, http.StatusForbidden, "You do not have permission to interact with this post")
 		return
 	}
-
-	// Perform the database operation
 	if err := SetPostLike(userID, postID, req.LikeType); err != nil {
 		log.Printf("Error setting post like: %v", err)
 		respondWithError(w, http.StatusInternalServerError, "Failed to process like/dislike")
@@ -100,13 +93,11 @@ func (h *PostHandlers) LikeCommentHandler(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
 	if req.LikeType < -1 || req.LikeType > 1 {
 		respondWithError(w, http.StatusBadRequest, "Invalid like_type value. Must be -1, 0, or 1.")
 		return
 	}
-
-	// TODO: You might want a CanUserViewComment function for extra security
-	// For now, we assume if you can get the comment ID, you can view it.
 
 	if err := SetCommentLike(userID, commentID, req.LikeType); err != nil {
 		log.Printf("Error setting comment like: %v", err)
@@ -119,7 +110,6 @@ func (h *PostHandlers) LikeCommentHandler(w http.ResponseWriter, r *http.Request
 
 // SetPostLike inserts, updates, or deletes a user's vote on a post.
 func SetPostLike(userID string, postID, likeType int) error {
-	// If likeType is 0, we delete the vote.
 	if likeType == 0 {
 		_, err := database.DB.Exec("DELETE FROM post_likes WHERE user_id = ? AND post_id = ?", userID, postID)
 		return err
@@ -153,8 +143,6 @@ func SetCommentLike(userID string, commentID, likeType int) error {
 
 // GetFeedForUser retrieves all posts visible to a user, now including like counts.
 func GetFeedForUser(userID string) ([]models.PostWithAuthor, error) {
-	// This query is now more complex. It uses subqueries to calculate
-	// like/dislike counts for each post and to check the current user's reaction.
 	const query = `
 		SELECT
 			p.id, p.user_id, p.content, p.image_url, p.privacy, p.created_at,
@@ -346,7 +334,7 @@ func CanUserViewPost(userID string, postID int) (bool, error) {
 	err := database.DB.QueryRow("SELECT privacy, user_id FROM posts WHERE id = ?", postID).Scan(&privacy, &authorID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return false, nil // Post doesn't exist
+			return false, nil
 		}
 		return false, err
 	}
@@ -356,11 +344,10 @@ func CanUserViewPost(userID string, postID int) (bool, error) {
 	switch privacy {
 	case "public":
 		return true, nil
-	case "almost_private":
-		// You need a real follower check here
-		var isFollowing bool
-		err := database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM followers WHERE follower_id = ? AND followed_id = ? AND status = 'accepted')", userID, authorID).Scan(&isFollowing)
-		return isFollowing, err
+	// case "almost_private":
+	// 	var isFollowing bool
+	// 	err := database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM followers WHERE follower_id = ? AND followed_id = ? AND status = 'accepted')", userID, authorID).Scan(&isFollowing)
+	// 	return isFollowing, err
 	case "private":
 		var count int
 		err := database.DB.QueryRow("SELECT COUNT(*) FROM post_allowed_users WHERE post_id = ? AND user_id = ?", postID, userID).Scan(&count)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"social-network/database/models"
 	"social-network/services"
+
 	"github.com/gorilla/mux"
 )
 
@@ -28,13 +29,12 @@ func (h *UserHandler) SendFollowRequestHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if targetUser.IsPublic {
-		// Auto-follow
 		err := models.AcceptFollowRequest(actor.ID, targetUserID)
 		if err != nil {
 			http.Error(w, "Failed to follow user", http.StatusInternalServerError)
 			return
 		}
-		// Notify target user of new follower
+
 		msg := actor.FirstName + " " + actor.LastName + " is now following you."
 		notif := &models.Notification{
 			UserID:  targetUserID,
@@ -47,7 +47,7 @@ func (h *UserHandler) SendFollowRequestHandler(w http.ResponseWriter, r *http.Re
 		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following this user."})
 		return
 	}
-	// Create follow request
+
 	err = models.CreateFollowRequest(actor.ID, targetUserID)
 	if err != nil {
 		http.Error(w, "Failed to send follow request", http.StatusInternalServerError)
@@ -100,7 +100,7 @@ func (h *UserHandler) ListFollowersHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to list followers", http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{ "followers": followers })
+	json.NewEncoder(w).Encode(map[string]interface{}{"followers": followers})
 }
 
 // ListFollowingHandler returns a list of users the user is following.
@@ -116,7 +116,7 @@ func (h *UserHandler) ListFollowingHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Failed to list following", http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{ "following": following })
+	json.NewEncoder(w).Encode(map[string]interface{}{"following": following})
 }
 
 // ListPendingFollowRequestsHandler returns a list of pending follow requests for the current user.
@@ -126,14 +126,14 @@ func (h *UserHandler) ListPendingFollowRequestsHandler(w http.ResponseWriter, r 
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// Get full follow request objects with all details
 	followRequests, err := models.GetPendingFollowRequestsForUser(actor.ID)
 	if err != nil {
 		http.Error(w, "Failed to list pending follow requests", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Get requester details for each request
 	var requests []map[string]interface{}
 	for _, followRequest := range followRequests {
@@ -142,22 +142,20 @@ func (h *UserHandler) ListPendingFollowRequestsHandler(w http.ResponseWriter, r 
 			log.Printf("Error getting requester info for ID %s: %v", followRequest.RequesterID, err)
 			continue
 		}
-		
+
 		requests = append(requests, map[string]interface{}{
 			"id": followRequest.ID,
 			"requester": map[string]interface{}{
-				"id":        requester.ID,
-				"firstName": requester.FirstName,
-				"lastName":  requester.LastName,
-				"nickname":  requester.Nickname,
+				"id":         requester.ID,
+				"firstName":  requester.FirstName,
+				"lastName":   requester.LastName,
+				"nickname":   requester.Nickname,
 				"avatarPath": requester.AvatarPath,
 			},
 			"createdAt": followRequest.CreatedAt,
 		})
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(requests) // Return the array directly, not wrapped
 }
-
- 

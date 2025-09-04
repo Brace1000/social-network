@@ -2,13 +2,12 @@ package models
 
 import (
 	"database/sql"
-	"social-network/database" 
+	"social-network/database"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// Notification represents the structure of the 'notifications' table.
 type Notification struct {
 	ID        string
 	UserID    string
@@ -19,9 +18,8 @@ type Notification struct {
 	CreatedAt time.Time
 }
 
-// CreateNotification creates and saves a new notification to the database.
 func CreateNotification(notif *Notification) error {
-	notif.ID = uuid.NewString() // Generate a unique ID
+	notif.ID = uuid.NewString()
 
 	var actorID sql.NullString
 	if notif.ActorID != "" {
@@ -42,9 +40,9 @@ func CreateNotification(notif *Notification) error {
 	return err
 }
 
-// GetNotificationsForUser fetches all notifications for a specific user.
 func GetNotificationsForUser(userID string) ([]Notification, error) {
-	query := "SELECT id, user_id, actor_id, type, message, read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC"
+	query := `SELECT id, user_id, actor_id, type, message, read, created_at
+	          FROM notifications WHERE user_id = ? ORDER BY created_at DESC`
 	rows, err := database.DB.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -56,7 +54,6 @@ func GetNotificationsForUser(userID string) ([]Notification, error) {
 		var notif Notification
 		var actorID sql.NullString
 
-		// This is the clean, correct scan line.
 		err := rows.Scan(
 			&notif.ID,
 			&notif.UserID,
@@ -66,7 +63,7 @@ func GetNotificationsForUser(userID string) ([]Notification, error) {
 			&notif.Read,
 			&notif.CreatedAt,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +77,6 @@ func GetNotificationsForUser(userID string) ([]Notification, error) {
 	return notifications, nil
 }
 
-// MarkNotificationAsRead marks a notification as read for a specific user.
 func MarkNotificationAsRead(notificationID, userID string) error {
 	stmt, err := database.DB.Prepare(`
 		UPDATE notifications 
@@ -96,7 +92,6 @@ func MarkNotificationAsRead(notificationID, userID string) error {
 	return err
 }
 
-// GetUnreadNotificationCount returns the count of unread notifications for a user.
 func GetUnreadNotificationCount(userID string) (int, error) {
 	var count int
 	query := "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0"

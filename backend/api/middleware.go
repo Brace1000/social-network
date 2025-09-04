@@ -19,7 +19,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("AuthMiddleware: Processing request to %s", r.URL.Path)
 
-		// 1. Attempt to get the cookie from the request
 		cookie, err := r.Cookie("social_network_session")
 		if err != nil {
 			log.Printf("AuthMiddleware: Cookie 'social_network_session' not found, error: %v", err)
@@ -36,8 +35,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Validate the session token against the database
-		var userID string // Keep as string since it's a UUID
+		var userID string
 		query := "SELECT user_id FROM sessions WHERE token = ? AND expiry > CURRENT_TIMESTAMP"
 		err = database.DB.QueryRow(query, sessionToken).Scan(&userID)
 		if err != nil {
@@ -48,15 +46,12 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		log.Printf("AuthMiddleware: Successfully authenticated user ID: %s", userID)
 
-		// 4. Fetch the full user object from the database
 		user, err := models.GetUserByID(userID)
 		if err != nil || user == nil {
 			log.Printf("AuthMiddleware: Failed to get user by ID '%s', error: %v", userID, err)
 			respondWithError(w, http.StatusUnauthorized, "User not found")
 			return
 		}
-
-		// 5. Add the full user object to the context using the services context key
 		ctx := context.WithValue(r.Context(), services.UserContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -67,7 +62,6 @@ func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		// Allow only port 3000 for development
 		allowedOrigins := []string{
 			"http://localhost:3000",
 		}
@@ -78,7 +72,6 @@ func CORSMiddleware(next http.Handler) http.Handler {
 				break
 			}
 		}
-
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")

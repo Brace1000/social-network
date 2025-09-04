@@ -8,13 +8,11 @@ import (
 	"social-network/database/models"
 )
 
-// RoutedMessage wraps an incoming message with the client who sent it.
 type RoutedMessage struct {
 	Client  *Client
 	Message IncomingMessage
 }
 
-// Hub maintains the set of active clients and broadcasts messages to them.
 type Hub struct {
 	clients      map[string]map[*Client]bool
 	routeMessage chan *RoutedMessage
@@ -66,13 +64,11 @@ func (h *Hub) Run() {
 	}
 }
 
-// handlePrivateMessage processes and routes a 1-to-1 message.
 func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 	senderID := routedMsg.Client.UserID
 	recipientID := routedMsg.Message.RecipientID
 	content := routedMsg.Message.Content
 
-	// AUDIT POINT: Check if users are allowed to message each other.
 	canMessage, err := models.CanUsersMessage(senderID, recipientID)
 	if err != nil {
 		log.Printf("Error checking message permissions for %s -> %s: %v", senderID, recipientID, err)
@@ -80,11 +76,9 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 	}
 	if !canMessage {
 		log.Printf("Permission denied: User %s cannot message User %s.", senderID, recipientID)
-		// Optionally, send an error message back to the sender.
 		return
 	}
 
-	// Persist the message to the database.
 	dbMsg := &models.Message{
 		SenderID:    senderID,
 		RecipientID: recipientID,
@@ -94,22 +88,18 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 		log.Printf("Failed to save private message to DB: %v", err)
 		return
 	}
-
-	// Create the outgoing message payload.
 	outgoingMsg := OutgoingMessage{
 		Type:    "private_message",
-		Payload: *dbMsg, // Send the full message object with ID and timestamp
+		Payload: *dbMsg,
 	}
 	messageBytes, _ := json.Marshal(outgoingMsg)
 
-	// Check if recipient should receive instant messages
 	shouldReceiveInstant, err := models.ShouldReceiveInstantMessage(senderID, recipientID)
 	if err != nil {
 		log.Printf("Error checking instant message permissions for %s -> %s: %v", senderID, recipientID, err)
-		shouldReceiveInstant = false // Default to not sending instant messages on error
+		shouldReceiveInstant = false
 	}
 
-	// Send the message to the recipient's clients only if they should receive instant messages
 	if shouldReceiveInstant {
 		if recipientClients, ok := h.clients[recipientID]; ok {
 			for client := range recipientClients {
@@ -123,24 +113,17 @@ func (h *Hub) handlePrivateMessage(routedMsg *RoutedMessage) {
 		log.Printf("Recipient %s will not receive instant message from %s (no follow relationship and private profile). Message saved to DB.", recipientID, senderID)
 	}
 
-	// Also send the message back to the sender's other devices.
 	if senderClients, ok := h.clients[senderID]; ok {
 		for client := range senderClients {
-			// Don't resend to the originating client tab, though it's often harmless.
-			// if client != routedMsg.Client {
 			client.send <- messageBytes
-			// }
 		}
 	}
 }
 
-// handleGroupMessage processes and routes a group message.
 func (h *Hub) handleGroupMessage(routedMsg *RoutedMessage) {
 	senderID := routedMsg.Client.UserID
 	groupID := routedMsg.Message.GroupID
 	content := routedMsg.Message.Content
-
-	// AUDIT POINT: Check if the sender is a member of the group.
 	isMember, err := models.IsUserInGroup(senderID, groupID)
 	if err != nil {
 		log.Printf("Error checking group membership for user %s in group %s: %v", senderID, groupID, err)
@@ -151,7 +134,6 @@ func (h *Hub) handleGroupMessage(routedMsg *RoutedMessage) {
 		return
 	}
 
-	// Persist the message.
 	dbMsg := &models.Message{
 		SenderID: senderID,
 		GroupID:  groupID,
@@ -162,21 +144,18 @@ func (h *Hub) handleGroupMessage(routedMsg *RoutedMessage) {
 		return
 	}
 
-	// Create the outgoing payload.
 	outgoingMsg := OutgoingMessage{
 		Type:    "group_message",
 		Payload: *dbMsg,
 	}
 	messageBytes, _ := json.Marshal(outgoingMsg)
 
-	// Get all members of the group to broadcast the message.
 	memberIDs, err := models.GetGroupMemberIDs(groupID)
 	if err != nil {
 		log.Printf("Failed to get group members for group %s: %v", groupID, err)
 		return
 	}
 
-	// AUDIT POINT: Broadcast to all online members of the group.
 	for _, memberID := range memberIDs {
 		if memberClients, ok := h.clients[memberID]; ok {
 			for client := range memberClients {
@@ -187,25 +166,21 @@ func (h *Hub) handleGroupMessage(routedMsg *RoutedMessage) {
 	log.Printf("Broadcast group message from %s to group %s", senderID, groupID)
 }
 
-// SendNotification creates a notification, saves it to the DB, and pushes it to the user if they are online.
 func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
-	// 1. Create and save the notification to the database
 	notification := &models.Notification{
 		UserID:  userID,
 		ActorID: actorID,
 		Type:    notifType,
 		Message: message,
-		Read:    false, // New notifications are always unread
+		Read:    false,
 	}
 
 	if err := models.CreateNotification(notification); err != nil {
 		log.Printf("Failed to save notification to DB: %v", err)
-		return // Don't send if we can't save it
+		return
 	}
 
-	// 2. Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
-		// 3. If they are online, create the real-time message payload
 		wsNotif := NotificationMessage{
 			Type: "notification",
 			Payload: struct {
@@ -230,7 +205,6 @@ func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
 			return
 		}
 
-		// 4. Send the notification to all of that user's active connections
 		for client := range userClients {
 			select {
 			case client.send <- messageBytes:
@@ -240,17 +214,11 @@ func (h *Hub) SendNotification(userID, actorID, notifType, message string) {
 			}
 		}
 		log.Printf("Sent real-time notification of type '%s' to user %s", notifType, userID)
-	} else {
-		// User is not online, notification saved to DB for later retrieval
-		// (removed debug log to reduce noise)
 	}
 }
 
-// SendFollowRequestUpdate sends a message to refresh follow requests for a user
 func (h *Hub) SendFollowRequestUpdate(userID string) {
-	// Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
-		// Create the follow request update message
 		updateMsg := struct {
 			Type string `json:"type"`
 			Data struct {
@@ -273,7 +241,6 @@ func (h *Hub) SendFollowRequestUpdate(userID string) {
 			return
 		}
 
-		// Send the update to all of that user's active connections
 		for client := range userClients {
 			select {
 			case client.send <- messageBytes:
@@ -283,17 +250,11 @@ func (h *Hub) SendFollowRequestUpdate(userID string) {
 			}
 		}
 		log.Printf("Sent follow request update to user %s", userID)
-	} else {
-		// User is not online, update will be handled when they connect
-		// (removed debug log to reduce noise)
 	}
 }
 
-// SendUserListUpdate sends a message to refresh the user list for a user
 func (h *Hub) SendUserListUpdate(userID string) {
-	// Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
-		// Create the user list update message
 		updateMsg := struct {
 			Type string `json:"type"`
 			Data struct {
@@ -316,7 +277,6 @@ func (h *Hub) SendUserListUpdate(userID string) {
 			return
 		}
 
-		// Send the update to all of that user's active connections
 		for client := range userClients {
 			select {
 			case client.send <- messageBytes:
@@ -326,17 +286,11 @@ func (h *Hub) SendUserListUpdate(userID string) {
 			}
 		}
 		log.Printf("Sent user list update to user %s", userID)
-	} else {
-		// User is not online, update will be handled when they connect
-		// (removed debug log to reduce noise)
 	}
 }
 
-// SendMessageToUser sends a message directly to a specific user if they're online
 func (h *Hub) SendMessageToUser(userID string, message *models.Message) {
-	// Check if the target user is online
 	if userClients, ok := h.clients[userID]; ok {
-		// Create the message payload
 		messagePayload := struct {
 			Type string          `json:"type"`
 			Data *models.Message `json:"data"`
@@ -345,14 +299,12 @@ func (h *Hub) SendMessageToUser(userID string, message *models.Message) {
 			Data: message,
 		}
 
-		// Marshal to JSON
 		jsonData, err := json.Marshal(messagePayload)
 		if err != nil {
 			log.Printf("Error marshaling message to JSON: %v", err)
 			return
 		}
 
-		// Send to all clients of this user
 		for client := range userClients {
 			select {
 			case client.send <- jsonData:

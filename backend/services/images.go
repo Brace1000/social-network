@@ -14,7 +14,6 @@ type ImageService struct {
 }
 
 func NewImageService(uploadDir string) *ImageService {
-	// Create upload directory if it doesn't exist
 	if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
 		os.MkdirAll(uploadDir, 0o755)
 	}
@@ -25,7 +24,6 @@ func NewImageService(uploadDir string) *ImageService {
 }
 
 func (s *ImageService) ValidateImage(handler *multipart.FileHeader) (bool, error) {
-	// Check file size (max 5MB)
 	if handler.Size > 5<<20 {
 		return false, nil
 	}
@@ -47,30 +45,25 @@ func (s *ImageService) ValidateImage(handler *multipart.FileHeader) (bool, error
 }
 
 func (s *ImageService) SaveImage(file multipart.File, handler *multipart.FileHeader, subdir string) (string, error) {
-	// Create subdirectory if it doesn't exist
 	dirPath := filepath.Join(s.uploadDir, subdir)
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		os.MkdirAll(dirPath, 0o755)
 	}
 
-	// Create a new file name to prevent overwriting and directory traversal
 	ext := filepath.Ext(handler.Filename)
 	newFileName := time.Now().Format("20060102150405") + "_" + GenerateRandomString(8) + ext
 	filePath := filepath.Join(dirPath, newFileName)
 
-	// Create the file
 	dst, err := os.Create(filePath)
 	if err != nil {
 		return "", err
 	}
 	defer dst.Close()
 
-	// Copy the uploaded file to the filesystem
 	if _, err := io.Copy(dst, file); err != nil {
 		return "", err
 	}
 
-	// Return the relative path
 	return filepath.Join(subdir, newFileName), nil
 }
 
@@ -79,7 +72,5 @@ func (s *ImageService) GetImagePath(relativePath string) string {
 }
 
 func GenerateRandomString(length int) string {
-	// Implementation of random string generation
-	// You can use a proper random string generator here
-	return "random" // Placeholder
+	return "random"
 }

@@ -13,14 +13,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// DB is the global database connection pool.
 var DB *sql.DB
 
 // InitDB initializes the database connection and applies migrations.
 func InitDB() (*sql.DB, error) {
 	dbPath := "./database/social_network.db"
 	dbDir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
 		return nil, err
 	}
 
@@ -34,7 +33,7 @@ func InitDB() (*sql.DB, error) {
 	}
 
 	log.Println("Database initialized successfully.")
-	applyMigrations() // We don't need to pass the dbPath anymore
+	applyMigrations()
 
 	return DB, nil
 }
@@ -42,13 +41,10 @@ func InitDB() (*sql.DB, error) {
 func applyMigrations() {
 	log.Println("Applying database migrations...")
 
-
 	_, b, _, _ := runtime.Caller(0)
 	basepath := filepath.Dir(b)
 	migrationsPath := filepath.Join(basepath, "migrations")
-	// The path must be in file:// format for the migrate library
 	migrationsURL := "file://" + migrationsPath
-
 
 	driver, err := sqlite3.WithInstance(DB, &sqlite3.Config{})
 	if err != nil {
@@ -56,7 +52,7 @@ func applyMigrations() {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		migrationsURL, 
+		migrationsURL,
 		"sqlite3",
 		driver,
 	)

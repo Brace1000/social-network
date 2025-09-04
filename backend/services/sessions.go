@@ -1,13 +1,12 @@
 package services
 
 import (
+	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"social-network/database/models"
-
-	"io"
-	"os"
 
 	"github.com/google/uuid"
 )
@@ -16,11 +15,10 @@ type contextKey string
 
 const (
 	SessionCookieName = "social_network_session"
-	SessionDuration   = 24 * 7 * time.Hour // Sessions last for one week
+	SessionDuration   = 24 * 7 * time.Hour
 	UserContextKey    = contextKey("user")
 )
 
-// CreateSession creates a new session for a user and returns the session token.
 func CreateSession(userID string) (string, error) {
 	sessionToken := uuid.NewString()
 	expiresAt := time.Now().Add(SessionDuration)
@@ -38,7 +36,6 @@ func CreateSession(userID string) (string, error) {
 	return sessionToken, nil
 }
 
-// SetSessionCookie sets the session cookie on the HTTP response.
 func SetSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -49,26 +46,24 @@ func SetSessionCookie(w http.ResponseWriter, token string) {
 	})
 }
 
-// GetUserFromSession retrieves the user associated with a session token from a request cookie.
 func GetUserFromSession(r *http.Request) (*models.User, error) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
-		return nil, nil // No cookie means no user is logged in
+		return nil, nil
 	}
 
 	sessionToken := cookie.Value
 	return GetUserFromSessionToken(sessionToken)
 }
 
-// GetUserFromSessionToken retrieves the user associated with a session token.
 func GetUserFromSessionToken(sessionToken string) (*models.User, error) {
 	session, err := models.GetSessionByToken(sessionToken)
 	if err != nil {
-		return nil, err // Database error
+		return nil, err
 	}
 
 	if session == nil || session.IsExpired() {
-		return nil, nil // Session not found or expired
+		return nil, nil
 	}
 
 	user, err := models.GetUserByID(session.UserID)
@@ -78,7 +73,6 @@ func GetUserFromSessionToken(sessionToken string) (*models.User, error) {
 	return user, nil
 }
 
-// ClearSessionCookie logs the user out by deleting the session and expiring the cookie.
 func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
@@ -95,11 +89,9 @@ func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// SaveUploadedFile saves an uploaded file to the given path and returns the file handle.
 func SaveUploadedFile(src io.Reader, dstPath string) (*os.File, error) {
-	// Ensure the directory exists
 	dir := "./uploads/avatars"
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
 	f, err := os.Create(dstPath)

@@ -8,17 +8,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// FollowRequest represents the structure of the 'follow_requests' table.
 type FollowRequest struct {
 	ID          string
 	RequesterID string
 	TargetID    string
-	Status      string // 'pending', 'accepted', 'declined'
+	Status      string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
-// CreateFollowRequest creates a new follow request in the database.
 func CreateFollowRequest(requesterID, targetID string) error {
 	requestID := uuid.NewString()
 	stmt, err := database.DB.Prepare(`
@@ -34,7 +32,6 @@ func CreateFollowRequest(requesterID, targetID string) error {
 	return err
 }
 
-// GetFollowRequest retrieves a follow request by requester and target IDs.
 func GetFollowRequest(requesterID, targetID string) (*FollowRequest, error) {
 	request := &FollowRequest{}
 	row := database.DB.QueryRow(`
@@ -54,15 +51,13 @@ func GetFollowRequest(requesterID, targetID string) (*FollowRequest, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // No request found
+			return nil, nil
 		}
 		return nil, err
 	}
-
 	return request, nil
 }
 
-// GetFollowRequestByID retrieves a follow request by its ID.
 func GetFollowRequestByID(requestID string) (*FollowRequest, error) {
 	request := &FollowRequest{}
 	row := database.DB.QueryRow(`
@@ -82,15 +77,13 @@ func GetFollowRequestByID(requestID string) (*FollowRequest, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // No request found
+			return nil, nil
 		}
 		return nil, err
 	}
-
 	return request, nil
 }
 
-// GetPendingFollowRequestsForUser retrieves all pending follow requests for a user.
 func GetPendingFollowRequestsForUser(userID string) ([]*FollowRequest, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, requester_id, target_id, status, created_at, updated_at 
@@ -110,7 +103,7 @@ func GetPendingFollowRequestsForUser(userID string) ([]*FollowRequest, error) {
 			&request.ID,
 			&request.RequesterID,
 			&request.TargetID,
-		&request.Status,
+			&request.Status,
 			&request.CreatedAt,
 			&request.UpdatedAt,
 		)
@@ -123,7 +116,6 @@ func GetPendingFollowRequestsForUser(userID string) ([]*FollowRequest, error) {
 	return requests, nil
 }
 
-// GetPendingFollowRequestsByUser retrieves all pending follow requests sent by a user.
 func GetPendingFollowRequestsByUser(userID string) ([]*FollowRequest, error) {
 	rows, err := database.DB.Query(`
 		SELECT id, requester_id, target_id, status, created_at, updated_at 
@@ -156,7 +148,6 @@ func GetPendingFollowRequestsByUser(userID string) ([]*FollowRequest, error) {
 	return requests, nil
 }
 
-// UpdateFollowRequestStatus updates the status of a follow request.
 func UpdateFollowRequestStatus(requestID, status string) error {
 	stmt, err := database.DB.Prepare(`
 		UPDATE follow_requests 
@@ -167,12 +158,10 @@ func UpdateFollowRequestStatus(requestID, status string) error {
 		return err
 	}
 	defer stmt.Close()
-
 	_, err = stmt.Exec(status, requestID)
 	return err
 }
 
-// DeleteFollowRequest deletes a follow request.
 func DeleteFollowRequest(requestID string) error {
 	stmt, err := database.DB.Prepare("DELETE FROM follow_requests WHERE id = ?")
 	if err != nil {
@@ -183,5 +172,3 @@ func DeleteFollowRequest(requestID string) error {
 	_, err = stmt.Exec(requestID)
 	return err
 }
-
- 

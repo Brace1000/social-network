@@ -16,7 +16,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// UserHandler holds dependencies for user-related handlers, like the WebSocket hub.
 type UserHandler struct {
 	hub *websocket.Hub
 }
@@ -26,7 +25,6 @@ func NewUserHandlers(h *websocket.Hub) *UserHandler {
 	return &UserHandler{hub: h}
 }
 
-// --- Request/Response Structs remain the same ---
 type RegisterRequest struct {
 	FirstName   string `json:"firstName"`
 	LastName    string `json:"lastName"`
@@ -37,24 +35,20 @@ type RegisterRequest struct {
 	AboutMe     string `json:"aboutMe,omitempty"`
 }
 
-// ... (LoginRequest and UserResponse are the same as before)
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type UserResponse struct {
-	ID        string `json:"id"` // <-- CHANGED: ID is a STRING
+	ID        string `json:"id"`
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
 	Email     string `json:"email"`
 	Nickname  string `json:"nickname,omitempty"`
 }
 
-// --- Handlers are now methods on the UserHandler struct ---
-
 func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	// This code remains exactly the same as before.
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -89,7 +83,6 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		AboutMe:      req.AboutMe,
 		IsPublic:     true,
 	}
-
 	if err := models.CreateUser(user); err != nil {
 		log.Printf("ERROR: Failed to create user in database: %v", err)
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
@@ -100,8 +93,6 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
-
-
 
 func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("--- LoginHandler: Running ---")
@@ -158,7 +149,9 @@ func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 func createAndSaveSession(userID string) (string, time.Time, error) {
 	tokenUUID, err := uuid.NewRandom()
-	if err != nil { return "", time.Time{}, err }
+	if err != nil {
+		return "", time.Time{}, err
+	}
 	token := tokenUUID.String()
 	expiry := time.Now().Add(7 * 24 * time.Hour)
 
@@ -247,14 +240,12 @@ func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if targetUser.IsPublic {
-		// For public profiles, automatically follow
 		err = models.FollowUser(actor.ID, targetUserID)
 		if err != nil {
 			http.Error(w, "Failed to follow user", http.StatusInternalServerError)
 			return
 		}
 
-		// Send real-time updates to both users to refresh their user lists
 		go h.hub.SendUserListUpdate(actor.ID)
 		go h.hub.SendUserListUpdate(targetUserID)
 
@@ -262,20 +253,17 @@ func (h *UserHandler) FollowRequestHandler(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "You are now following " + targetUser.FirstName})
 	} else {
-		// For private profiles, create a follow request
 		err = models.CreateFollowRequest(actor.ID, targetUserID)
 		if err != nil {
 			http.Error(w, "Failed to create follow request", http.StatusInternalServerError)
 			return
 		}
 
-		// Send notification to the target user
 		notificationMessage := fmt.Sprintf("%s %s wants to follow you.", actor.FirstName, actor.LastName)
 		go h.hub.SendNotification(targetUser.ID, actor.ID, "follow_request", notificationMessage)
 
-		// Send follow request updates to both users to refresh their frontend
-		go h.hub.SendFollowRequestUpdate(targetUser.ID) // Recipient
-		go h.hub.SendFollowRequestUpdate(actor.ID)      // Requester
+		go h.hub.SendFollowRequestUpdate(targetUser.ID)
+		go h.hub.SendFollowRequestUpdate(actor.ID)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -337,14 +325,13 @@ func (h *UserHandler) AcceptFollowRequestHandler(w http.ResponseWriter, r *http.
 	if err != nil {
 		log.Printf("Error getting requester info: %v", err)
 	} else {
-		// Send notification to requester that their request was accepted
 		notificationMessage := fmt.Sprintf("%s %s accepted your follow request.", actor.FirstName, actor.LastName)
 		go h.hub.SendNotification(requester.ID, actor.ID, "follow_accepted", notificationMessage)
 	}
 
 	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)     // Recipient (current user)
-	go h.hub.SendFollowRequestUpdate(requester.ID) // Requester
+	go h.hub.SendFollowRequestUpdate(actor.ID)
+	go h.hub.SendFollowRequestUpdate(requester.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -398,14 +385,13 @@ func (h *UserHandler) DeclineFollowRequestHandler(w http.ResponseWriter, r *http
 	if err != nil {
 		log.Printf("Error getting requester info: %v", err)
 	} else {
-		// Send notification to requester that their request was declined
 		notificationMessage := fmt.Sprintf("%s %s declined your follow request.", actor.FirstName, actor.LastName)
 		go h.hub.SendNotification(requester.ID, actor.ID, "follow_declined", notificationMessage)
 	}
 
 	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)     // Recipient (current user)
-	go h.hub.SendFollowRequestUpdate(requester.ID) // Requester
+	go h.hub.SendFollowRequestUpdate(actor.ID)
+	go h.hub.SendFollowRequestUpdate(requester.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -462,9 +448,8 @@ func (h *UserHandler) CancelFollowRequestHandler(w http.ResponseWriter, r *http.
 		go h.hub.SendNotification(recipient.ID, actor.ID, "follow_canceled", notificationMessage)
 	}
 
-	// Send real-time updates to both users to refresh their follow request lists
-	go h.hub.SendFollowRequestUpdate(actor.ID)     // Requester (current user)
-	go h.hub.SendFollowRequestUpdate(recipient.ID) // Recipient
+	go h.hub.SendFollowRequestUpdate(actor.ID)
+	go h.hub.SendFollowRequestUpdate(recipient.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -551,7 +536,6 @@ func (h *UserHandler) GetMyFollowRequestsHandler(w http.ResponseWriter, r *http.
 	json.NewEncoder(w).Encode(response)
 }
 
-// MakeProfilePrivateHandler is a TEMPORARY handler for debugging purposes.
 // It changes a user's profile to private.
 func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.Request) {
 	_, ok := r.Context().Value(services.UserContextKey).(*models.User)
@@ -569,7 +553,7 @@ func (h *UserHandler) MakeProfilePrivateHandler(w http.ResponseWriter, r *http.R
 	}
 
 	// Perform the database update
-	err := models.SetUserProfilePrivacy(targetUserID, false) // false means private
+	err := models.SetUserProfilePrivacy(targetUserID, false)
 	if err != nil {
 		log.Printf("Error updating user privacy: %v", err)
 		http.Error(w, "Failed to update profile", http.StatusInternalServerError)

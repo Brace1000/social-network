@@ -4,8 +4,6 @@ import (
 	"social-network/database"
 )
 
-// AreFollowing checks if a one-way follow relationship exists.
-// Specifically, it checks if user1 is following user2.
 func AreFollowing(user1ID, user2ID string) (bool, error) {
 	var exists bool
 	query := "SELECT EXISTS(SELECT 1 FROM followers WHERE follower_id = ? AND following_id = ?)"
@@ -16,8 +14,6 @@ func AreFollowing(user1ID, user2ID string) (bool, error) {
 	return exists, nil
 }
 
-// CheckFollowRelationship verifies if two users can message each other.
-// This is true if user1 follows user2, OR user2 follows user1.
 func CheckFollowRelationship(user1ID, user2ID string) (bool, error) {
 	var exists bool
 	query := `
@@ -32,39 +28,42 @@ func CheckFollowRelationship(user1ID, user2ID string) (bool, error) {
 	return exists, nil
 }
 
-// AcceptFollowRequest accepts a pending follow request and adds to followers.
 func AcceptFollowRequest(requesterID, targetID string) error {
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(`UPDATE follow_requests SET status = 'accepted' WHERE requester_id = ? AND target_id = ? AND status = 'pending'`, requesterID, targetID)
+	_, err = tx.Exec(
+		`UPDATE follow_requests SET status = 'accepted' 
+		WHERE requester_id = ? AND target_id = ? AND status = 'pending'`, requesterID, targetID)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT OR IGNORE INTO followers (follower_id, following_id) VALUES (?, ?)`, requesterID, targetID)
+	_, err = tx.Exec(
+		`INSERT OR IGNORE INTO followers (follower_id, following_id) VALUES (?, ?)`, requesterID, targetID)
 	if err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-// DeclineFollowRequest declines a pending follow request.
 func DeclineFollowRequest(requesterID, targetID string) error {
-	_, err := database.DB.Exec(`UPDATE follow_requests SET status = 'declined' WHERE requester_id = ? AND target_id = ? AND status = 'pending'`, requesterID, targetID)
+	_, err := database.DB.Exec(`
+	UPDATE follow_requests SET status = 'declined'
+	WHERE requester_id = ? AND target_id = ? AND status = 'pending'`, requesterID, targetID)
 	return err
 }
 
-// RemoveFollower removes a follower relationship.
 func RemoveFollower(followerID, followingID string) error {
 	_, err := database.DB.Exec(`DELETE FROM followers WHERE follower_id = ? AND following_id = ?`, followerID, followingID)
 	return err
 }
 
-// ListFollowers returns a list of user IDs who follow the given user.
 func ListFollowers(userID string) ([]string, error) {
-	rows, err := database.DB.Query(`SELECT follower_id FROM followers WHERE following_id = ?`, userID)
+	rows, err := database.DB.Query(`
+	SELECT follower_id FROM followers WHERE following_id = ?`,
+		userID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +79,10 @@ func ListFollowers(userID string) ([]string, error) {
 	return followers, nil
 }
 
-// ListFollowing returns a list of user IDs whom the given user is following.
 func ListFollowing(userID string) ([]string, error) {
-	rows, err := database.DB.Query(`SELECT following_id FROM followers WHERE follower_id = ?`, userID)
+	rows, err := database.DB.Query(`
+	SELECT following_id 
+	FROM followers WHERE follower_id = ?`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,9 +98,10 @@ func ListFollowing(userID string) ([]string, error) {
 	return following, nil
 }
 
-// ListPendingFollowRequests returns pending follow requests for a user (as target).
 func ListPendingFollowRequests(targetID string) ([]string, error) {
-	rows, err := database.DB.Query(`SELECT requester_id FROM follow_requests WHERE target_id = ? AND status = 'pending'`, targetID)
+	rows, err := database.DB.Query(`
+	SELECT requester_id 
+	FROM follow_requests WHERE target_id = ? AND status = 'pending'`, targetID)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,6 @@ func ListPendingFollowRequests(targetID string) ([]string, error) {
 	return requesters, nil
 }
 
-// FollowUser creates a follow relationship between two users.
 func FollowUser(followerID, followingID string) error {
 	stmt, err := database.DB.Prepare(`
 		INSERT INTO followers (follower_id, following_id)
@@ -126,7 +126,6 @@ func FollowUser(followerID, followingID string) error {
 		return err
 	}
 	defer stmt.Close()
-
 	_, err = stmt.Exec(followerID, followingID)
 	return err
 }

@@ -1,7 +1,8 @@
 package websocket
 
-import ("time"
-"social-network/database/models"
+import (
+	"social-network/database/models"
+	"time"
 )
 
 type MessageType string
@@ -15,22 +16,20 @@ const (
 )
 
 type IncomingMessage struct {
-	Type        string `json:"type"`                  // "private_message" or "group_message"
-	RecipientID string `json:"recipientId,omitempty"` // UserID for private messages
-	GroupID     string `json:"groupId,omitempty"`     // GroupID for group messages
+	Type        string `json:"type"`
+	RecipientID string `json:"recipientId,omitempty"`
+	GroupID     string `json:"groupId,omitempty"`
 	Content     string `json:"content"`
 }
 
-// OutgoingMessage is the format for messages sent back to clients.
 type OutgoingMessage struct {
-	Type    string         `json:"type"`    // "private_message" or "group_message"
-	Payload models.Message `json:"payload"` // The full message object from the database
-
+	Type    string         `json:"type"`
+	Payload models.Message `json:"payload"`
 }
 
 type NotificationMessage struct {
-	Type      string    `json:"type"`
-	Payload   struct {
+	Type    string `json:"type"`
+	Payload struct {
 		ID        string `json:"id"`
 		Message   string `json:"message"`
 		ActorID   string `json:"actorId,omitempty"`

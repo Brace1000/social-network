@@ -2,8 +2,9 @@ package models
 
 import (
 	"database/sql"
-	"testing"
 	"social-network/database"
+	"testing"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -65,4 +66,4 @@ func TestCreateAndGetNotifications(t *testing.T) {
 	if len(notifs) != 0 {
 		t.Fatalf("GetNotificationsForUser (empty) should be 0, got: %d", len(notifs))
 	}
-} 
+}

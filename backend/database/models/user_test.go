@@ -2,8 +2,9 @@ package models
 
 import (
 	"database/sql"
-	"testing"
 	"social-network/database"
+	"testing"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -51,12 +52,12 @@ func TestUserProfileLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
-	// Get user by ID
+
 	got, err := GetUserByID("u1")
 	if err != nil || got == nil || got.FirstName != "Alice" {
 		t.Fatalf("GetUserByID failed: %v, got: %+v", err, got)
 	}
-	// Update profile
+
 	got.FirstName = "Alicia"
 	got.Nickname = "ally"
 	got.AboutMe = "Updated!"
@@ -66,7 +67,7 @@ func TestUserProfileLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateUserProfile failed: %v", err)
 	}
-	// Get again and check updates
+
 	updated, err := GetUserByID("u1")
 	if err != nil || updated == nil || updated.FirstName != "Alicia" || updated.Nickname != "ally" || updated.AboutMe != "Updated!" || updated.IsPublic != false || updated.AvatarPath != "avatar.png" {
 		t.Fatalf("UpdateUserProfile did not persist changes: %+v", updated)
@@ -91,12 +92,12 @@ func TestGetUserByEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser failed: %v", err)
 	}
-	// Get by email
+
 	got, err := GetUserByEmail("bob@example.com")
 	if err != nil || got == nil || got.ID != "u2" {
 		t.Fatalf("GetUserByEmail failed: %v, got: %+v", err, got)
 	}
-	// Not found
+
 	notfound, err := GetUserByEmail("nope@example.com")
 	if err != nil || notfound != nil {
 		t.Fatalf("GetUserByEmail notfound failed: %v, got: %+v", err, notfound)
@@ -138,4 +139,4 @@ func TestGetUserByID_NotFound(t *testing.T) {
 	if got != nil {
 		t.Fatalf("GetUserByID notfound should be nil, got: %+v", got)
 	}
-} 
+}

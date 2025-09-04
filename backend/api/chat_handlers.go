@@ -15,28 +15,21 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// ChatHandlers holds dependencies for chat-related handlers.
 type ChatHandlers struct {
 	hub *websocket.Hub
 }
-
-// NewChatHandlers creates a new ChatHandlers.
 
 func NewChatHandlers(hub *websocket.Hub) *ChatHandlers {
 	return &ChatHandlers{hub: hub}
 }
 
-// GetPrivateConversationHandler fetches the message history between the logged-in user and another user.
 func (h *ChatHandlers) GetPrivateConversationHandler(w http.ResponseWriter, r *http.Request) {
-
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
-		// This should theoretically not happen if AuthMiddleware is working.
 		respondWithError(w, http.StatusInternalServerError, "Could not identify current user from context")
 		return
 	}
 
-	// Get the other user's ID from the URL path.
 	vars := mux.Vars(r)
 	otherUserID := vars["userID"]
 	if otherUserID == "" {
@@ -54,7 +47,6 @@ func (h *ChatHandlers) GetPrivateConversationHandler(w http.ResponseWriter, r *h
 	respondWithJSON(w, http.StatusOK, messages)
 }
 
-// GetGroupConversationHandler fetches the message history for a specific group.
 func (h *ChatHandlers) GetGroupConversationHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -63,10 +55,8 @@ func (h *ChatHandlers) GetGroupConversationHandler(w http.ResponseWriter, r *htt
 	}
 
 	vars := mux.Vars(r)
-	// Group IDs are typically strings (UUIDs), so we don't convert to int.
 	groupID := vars["groupID"]
 
-	// AUDIT POINT: First, check if the user is a member of this group before fetching messages.
 	isMember, err := models.IsUserInGroup(currentUser.ID, groupID)
 	if err != nil {
 		log.Printf("Error checking group membership: %v", err)
@@ -88,15 +78,12 @@ func (h *ChatHandlers) GetGroupConversationHandler(w http.ResponseWriter, r *htt
 	respondWithJSON(w, http.StatusOK, messages)
 }
 
-// --- Database Helper Functions ---
-
-// getPrivateMessages queries the database for the conversation between two users.
 func getPrivateMessages(userID1, userID2 int) ([]models.Message, error) {
 	query := `
 		SELECT id, sender_id, recipient_id, group_id, content, created_at FROM chat_messages
 		WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)
 		ORDER BY created_at ASC
-		LIMIT 100` // Always use LIMIT for chat history to prevent fetching huge datasets.
+		LIMIT 100`
 
 	rows, err := database.DB.Query(query, userID1, userID2, userID2, userID1)
 	if err != nil {
@@ -107,7 +94,6 @@ func getPrivateMessages(userID1, userID2 int) ([]models.Message, error) {
 	return scanMessages(rows)
 }
 
-// getPrivateMessagesWithStrings queries the database for the conversation between two users using string IDs.
 func getPrivateMessagesWithStrings(userID1, userID2 string) ([]models.Message, error) {
 	query := `
 		SELECT id, sender_id, recipient_id, group_id, content, created_at FROM chat_messages
@@ -124,7 +110,6 @@ func getPrivateMessagesWithStrings(userID1, userID2 string) ([]models.Message, e
 	return scanMessages(rows)
 }
 
-// getGroupMessages queries the database for all messages in a specific group.
 func getGroupMessages(groupID string) ([]models.Message, error) {
 	query := `
 		SELECT id, sender_id, recipient_id, group_id, content, created_at FROM chat_messages
@@ -141,19 +126,16 @@ func getGroupMessages(groupID string) ([]models.Message, error) {
 	return scanMessages(rows)
 }
 
-// scanMessages is a helper function to reduce code duplication when scanning message rows.
-// It correctly handles NULLable fields from the database.
 func scanMessages(rows *sql.Rows) ([]models.Message, error) {
 	var messages []models.Message
 	for rows.Next() {
 		var msg models.Message
-		var recipientID, groupID sql.NullString // Use sql.NullString for nullable columns.
+		var recipientID, groupID sql.NullString
 
 		if err := rows.Scan(&msg.ID, &msg.SenderID, &recipientID, &groupID, &msg.Content, &msg.CreatedAt); err != nil {
 			return nil, err
 		}
 
-		// Only assign the string if the database value was not NULL.
 		if recipientID.Valid {
 			msg.RecipientID = recipientID.String
 		}
@@ -165,7 +147,6 @@ func scanMessages(rows *sql.Rows) ([]models.Message, error) {
 	return messages, rows.Err()
 }
 
-// GetConversationsHandler returns a list of all conversations for the current user
 func (h *ChatHandlers) GetConversationsHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -183,7 +164,6 @@ func (h *ChatHandlers) GetConversationsHandler(w http.ResponseWriter, r *http.Re
 	respondWithJSON(w, http.StatusOK, conversations)
 }
 
-// CheckCanMessageHandler checks if the current user can message another user
 func (h *ChatHandlers) CheckCanMessageHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -208,7 +188,6 @@ func (h *ChatHandlers) CheckCanMessageHandler(w http.ResponseWriter, r *http.Req
 	respondWithJSON(w, http.StatusOK, map[string]bool{"canMessage": canMessage})
 }
 
-// SearchUsersHandler searches for users that the current user can potentially message
 func (h *ChatHandlers) SearchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -232,7 +211,6 @@ func (h *ChatHandlers) SearchUsersHandler(w http.ResponseWriter, r *http.Request
 	respondWithJSON(w, http.StatusOK, users)
 }
 
-// SendMessageHandler sends a message to another user
 func (h *ChatHandlers) SendMessageHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -255,7 +233,6 @@ func (h *ChatHandlers) SendMessageHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check if the current user can message the recipient
 	canMessage, err := models.CanUsersMessage(currentUser.ID, req.RecipientID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error checking message permissions")
@@ -267,7 +244,6 @@ func (h *ChatHandlers) SendMessageHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Create the message
 	message := &models.Message{
 		SenderID:    currentUser.ID,
 		RecipientID: req.RecipientID,
@@ -275,35 +251,30 @@ func (h *ChatHandlers) SendMessageHandler(w http.ResponseWriter, r *http.Request
 		CreatedAt:   time.Now(),
 	}
 
-	// Save the message to the database
 	if err := models.SaveMessage(message); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error saving message")
 		return
 	}
 
-	// Send the message via WebSocket to the recipient if they're online
 	h.hub.SendMessageToUser(req.RecipientID, message)
 
 	respondWithJSON(w, http.StatusCreated, message)
 }
 
-// Conversation represents a conversation summary for the conversations list
 type Conversation struct {
-	UserID          string `json:"userId,omitempty"`     // For private conversations
-	GroupID         string `json:"groupId,omitempty"`    // For group conversations
-	Name            string `json:"name"`                 // Display name
-	AvatarPath      string `json:"avatarPath,omitempty"` // Avatar URL
-	LastMessage     string `json:"lastMessage"`          // Last message content
-	LastMessageTime string `json:"lastMessageTime"`      // Last message timestamp
-	UnreadCount     int    `json:"unreadCount"`          // Number of unread messages
-	Type            string `json:"type"`                 // "private" or "group"
+	UserID          string `json:"userId,omitempty"`
+	GroupID         string `json:"groupId,omitempty"`
+	Name            string `json:"name"`
+	AvatarPath      string `json:"avatarPath,omitempty"`
+	LastMessage     string `json:"lastMessage"`
+	LastMessageTime string `json:"lastMessageTime"`
+	UnreadCount     int    `json:"unreadCount"`
+	Type            string `json:"type"`
 }
 
-// getUserConversations gets all conversations for a user (both private and group)
 func getUserConversations(userID string) ([]Conversation, error) {
 	var conversations []Conversation
 
-	// Get private conversations
 	privateQuery := `
 		SELECT DISTINCT
 			CASE
@@ -343,7 +314,6 @@ func getUserConversations(userID string) ([]Conversation, error) {
 			return nil, err
 		}
 
-		// Skip if we've already seen this user (to get only the latest message)
 		if seenUsers[conv.UserID] {
 			continue
 		}
@@ -352,12 +322,11 @@ func getUserConversations(userID string) ([]Conversation, error) {
 		conv.Type = "private"
 		conv.AvatarPath = avatarPath.String
 		conv.LastMessageTime = lastMessageTime
-		conv.UnreadCount = 0 // TODO: Implement unread count logic
+		conv.UnreadCount = 0
 
 		conversations = append(conversations, conv)
 	}
 
-	// Get group conversations
 	groupQuery := `
 		SELECT DISTINCT
 			g.id as group_id,
@@ -387,7 +356,6 @@ func getUserConversations(userID string) ([]Conversation, error) {
 			return nil, err
 		}
 
-		// Skip if we've already seen this group
 		if seenGroups[conv.GroupID] {
 			continue
 		}
@@ -396,7 +364,7 @@ func getUserConversations(userID string) ([]Conversation, error) {
 		conv.Type = "group"
 		conv.LastMessage = lastMessage.String
 		conv.LastMessageTime = lastMessageTime.String
-		conv.UnreadCount = 0 // TODO: Implement unread count logic
+		conv.UnreadCount = 0
 
 		conversations = append(conversations, conv)
 	}
@@ -404,7 +372,6 @@ func getUserConversations(userID string) ([]Conversation, error) {
 	return conversations, nil
 }
 
-// searchUsersForChat searches for users that the current user can message
 func searchUsersForChat(currentUserID, query string) ([]map[string]interface{}, error) {
 	searchQuery := `
 		SELECT id, first_name, last_name, nickname, avatar_path, is_public
@@ -432,14 +399,12 @@ func searchUsersForChat(currentUserID, query string) ([]map[string]interface{}, 
 			return nil, err
 		}
 
-		// Check if current user can message this user
 		canMessage, err := models.CanUsersMessage(currentUserID, id)
 		if err != nil {
 			log.Printf("Error checking message permissions for user %s: %v", id, err)
 			continue
 		}
 
-		// Only include users that can be messaged
 		if !canMessage {
 			continue
 		}

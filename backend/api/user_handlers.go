@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"social-network/database/models"
 	"social-network/services"
+
 	"github.com/gorilla/mux"
 )
 
-// GetProfileHandler returns a user's profile, respecting privacy settings.
 func (h *UserHandler) GetProfileHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	targetUserID, ok := vars["userId"]
@@ -24,15 +24,13 @@ func (h *UserHandler) GetProfileHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Default: not allowed to view private profile
 	allowed := false
 	actor, actorOk := r.Context().Value(services.UserContextKey).(*models.User)
 	if targetUser.IsPublic {
 		allowed = true
 	} else if actorOk && actor.ID == targetUserID {
-		allowed = true // owner can view
+		allowed = true
 	} else if actorOk {
-		// Check if actor is a follower
 		isFollower, err := models.AreFollowing(actor.ID, targetUserID)
 		if err == nil && isFollower {
 			allowed = true
@@ -115,11 +113,11 @@ func (h *UserHandler) UpdateProfileHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	type UpdateProfileRequest struct {
-		FirstName   string `json:"firstName"`
-		LastName    string `json:"lastName"`
-		Nickname    string `json:"nickname"`
-		AboutMe     string `json:"aboutMe"`
-		IsPublic    *bool  `json:"isPublic"`
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
+		Nickname  string `json:"nickname"`
+		AboutMe   string `json:"aboutMe"`
+		IsPublic  *bool  `json:"isPublic"`
 	}
 	var req UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -159,7 +157,6 @@ func (h *UserHandler) UpdateProfileHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]string{"message": "Profile updated successfully"})
 }
 
-// UploadAvatarHandler allows the authenticated user to upload/change their avatar.
 func (h *UserHandler) UploadAvatarHandler(w http.ResponseWriter, r *http.Request) {
 	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -187,7 +184,6 @@ func (h *UserHandler) UploadAvatarHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Save file to disk (e.g., ./uploads/avatars/{userID}_{filename})
 	avatarPath := fmt.Sprintf("uploads/avatars/%s_%s", actor.ID, handler.Filename)
 	out, err := services.SaveUploadedFile(file, avatarPath)
 	if err != nil {
@@ -212,7 +208,6 @@ func (h *UserHandler) UploadAvatarHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(map[string]string{"message": "Avatar uploaded successfully", "avatarPath": avatarPath})
 }
 
-// GetAllUsersHandler returns a list of all users
 func (h *UserHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := models.GetAllUsers()
 	if err != nil {
@@ -262,7 +257,6 @@ func (h *UserHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Get actor details for each notification
 	var response []map[string]interface{}
 	for _, notif := range notifications {
 		notificationData := map[string]interface{}{
@@ -272,16 +266,14 @@ func (h *UserHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Req
 			"read":      notif.Read,
 			"createdAt": notif.CreatedAt,
 		}
-
-		// Add actor details if available
 		if notif.ActorID != "" {
 			actor, err := models.GetUserByID(notif.ActorID)
 			if err == nil && actor != nil {
 				notificationData["actor"] = map[string]interface{}{
-					"id":        actor.ID,
-					"firstName": actor.FirstName,
-					"lastName":  actor.LastName,
-					"nickname":  actor.Nickname,
+					"id":         actor.ID,
+					"firstName":  actor.FirstName,
+					"lastName":   actor.LastName,
+					"nickname":   actor.Nickname,
 					"avatarPath": actor.AvatarPath,
 				}
 			}
@@ -294,7 +286,6 @@ func (h *UserHandler) GetNotificationsHandler(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(response)
 }
 
-// MarkNotificationAsReadHandler marks a notification as read.
 func (h *UserHandler) MarkNotificationAsReadHandler(w http.ResponseWriter, r *http.Request) {
 	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -320,7 +311,6 @@ func (h *UserHandler) MarkNotificationAsReadHandler(w http.ResponseWriter, r *ht
 	json.NewEncoder(w).Encode(map[string]string{"message": "Notification marked as read"})
 }
 
-// ToggleProfilePrivacyHandler toggles the profile privacy setting for the current user
 func (h *UserHandler) ToggleProfilePrivacyHandler(w http.ResponseWriter, r *http.Request) {
 	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
 	if !ok {
@@ -328,14 +318,12 @@ func (h *UserHandler) ToggleProfilePrivacyHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Get current user to check current privacy setting
 	currentUser, err := models.GetUserByID(actor.ID)
 	if err != nil {
 		http.Error(w, "Failed to get user information", http.StatusInternalServerError)
 		return
 	}
 
-	// Toggle the privacy setting
 	newPrivacySetting := !currentUser.IsPublic
 	err = models.SetUserProfilePrivacy(actor.ID, newPrivacySetting)
 	if err != nil {
@@ -345,7 +333,7 @@ func (h *UserHandler) ToggleProfilePrivacyHandler(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Profile privacy updated successfully",
+		"message":  "Profile privacy updated successfully",
 		"isPublic": newPrivacySetting,
 	})
 }
