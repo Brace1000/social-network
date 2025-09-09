@@ -2,7 +2,6 @@ package models
 
 import (
 	"social-network/database"
-	"github.com/google/uuid"
 )
 
 // AreFollowing checks if a one-way follow relationship exists.
@@ -31,28 +30,6 @@ func CheckFollowRelationship(user1ID, user2ID string) (bool, error) {
 		return false, err
 	}
 	return exists, nil
-}
-
-// CreateFollowRequest creates a new follow request (pending) from requester to target.
-func CreateFollowRequest(requesterID, targetID string) error {
-	// Check for existing pending request
-	var count int
-	err := database.DB.QueryRow(
-		`SELECT COUNT(1) FROM follow_requests WHERE requester_id = ? AND target_id = ? AND status = 'pending'`,
-		requesterID, targetID,
-	).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil // Already exists, do not duplicate
-	}
-	id := uuid.NewString()
-	_, err = database.DB.Exec(
-		`INSERT INTO follow_requests (id, requester_id, target_id, status) VALUES (?, ?, ?, 'pending')`,
-		id, requesterID, targetID,
-	)
-	return err
 }
 
 // AcceptFollowRequest accepts a pending follow request and adds to followers.
@@ -137,4 +114,19 @@ func ListPendingFollowRequests(targetID string) ([]string, error) {
 		requesters = append(requesters, id)
 	}
 	return requesters, nil
+}
+
+// FollowUser creates a follow relationship between two users.
+func FollowUser(followerID, followingID string) error {
+	stmt, err := database.DB.Prepare(`
+		INSERT INTO followers (follower_id, following_id)
+		VALUES (?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(followerID, followingID)
+	return err
 }

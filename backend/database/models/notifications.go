@@ -79,3 +79,27 @@ func GetNotificationsForUser(userID string) ([]Notification, error) {
 	}
 	return notifications, nil
 }
+
+// MarkNotificationAsRead marks a notification as read for a specific user.
+func MarkNotificationAsRead(notificationID, userID string) error {
+	stmt, err := database.DB.Prepare(`
+		UPDATE notifications 
+		SET read = 1 
+		WHERE id = ? AND user_id = ?
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(notificationID, userID)
+	return err
+}
+
+// GetUnreadNotificationCount returns the count of unread notifications for a user.
+func GetUnreadNotificationCount(userID string) (int, error) {
+	var count int
+	query := "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0"
+	err := database.DB.QueryRow(query, userID).Scan(&count)
+	return count, err
+}

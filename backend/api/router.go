@@ -13,45 +13,73 @@ func SetupRouter(hub *websocket.Hub) http.Handler {
 	// Instantiate all handler groups
 	userHandlers := NewUserHandlers(hub)
 	postHandlers := NewPostHandlers()
+	chatHandlers := NewChatHandlers(hub)
 
+	// Create the main router
 	router := mux.NewRouter()
+
+	router.Use(CORSMiddleware)
+
+	// --- All subsequent routes are attached to the CORS-aware router ---
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 
 	// --- Public Routes ---
+	// These routes do not need authentication but will still have CORS headers.
 	apiRouter.HandleFunc("/register", userHandlers.RegisterHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/login", userHandlers.LoginHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/logout", userHandlers.LogoutHandler).Methods("POST", "OPTIONS")
 
 	// --- WebSocket Route ---
-	// Authentication is handled inside the WebSocket handler itself
 	apiRouter.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(hub, w, r)
 	})
 
-	// --- Protected Routes (require a valid session cookie via AuthMiddleware) ---
+	// --- Protected Routes Group ---
+	// Create a sub-router for all routes that require authentication.
 	auth := apiRouter.PathPrefix("").Subrouter()
+	// Now, apply the AuthMiddleware. It will run AFTER the CORS middleware.
+	auth.Use(AuthMiddleware)
 
-	// --- User & Follower Routes ---
-	auth.HandleFunc("/me", userHandlers.CurrentUserHandler).Methods("GET")
-	auth.HandleFunc("/follow/{userId}", userHandlers.SendFollowRequestHandler).Methods("POST")
-	auth.HandleFunc("/follow/{userId}/accept", userHandlers.AcceptFollowRequestHandler).Methods("POST")
-	auth.HandleFunc("/follow/{userId}/decline", userHandlers.DeclineFollowRequestHandler).Methods("POST")
-	auth.HandleFunc("/unfollow/{userId}", userHandlers.UnfollowHandler).Methods("POST") // Using POST for consistency
-	auth.HandleFunc("/followers/{userId}", userHandlers.ListFollowersHandler).Methods("GET")
-	auth.HandleFunc("/following/{userId}", userHandlers.ListFollowingHandler).Methods("GET")
-	auth.HandleFunc("/follow-requests", userHandlers.ListPendingFollowRequestsHandler).Methods("GET")
+	// --- Attach all protected handlers to the `auth` sub-router ---
+	// User & Follower Routes
+	auth.HandleFunc("/me", userHandlers.CurrentUserHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/users", userHandlers.GetAllUsersHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/follow/{userId}", userHandlers.FollowRequestHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/my-follow-requests", userHandlers.GetMyFollowRequestsHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/follow-requests/{requestId}/accept", userHandlers.AcceptFollowRequestHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/follow-requests/{requestId}/decline", userHandlers.DeclineFollowRequestHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/follow-requests/{requestId}/cancel", userHandlers.CancelFollowRequestHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/follow-requests", userHandlers.ListPendingFollowRequestsHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/unfollow/{userId}", userHandlers.UnfollowHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/followers/{userId}", userHandlers.ListFollowersHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/following/{userId}", userHandlers.ListFollowingHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/follow-status/{userId}", userHandlers.CheckFollowRequestStatusHandler).Methods("GET", "OPTIONS")
 
-	// --- Profile Routes ---
-	auth.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET")
-	auth.HandleFunc("/profile", userHandlers.UpdateProfileHandler).Methods("PUT")
-	auth.HandleFunc("/profile/avatar", userHandlers.UploadAvatarHandler).Methods("POST")
-	auth.HandleFunc("/profile/make-private", userHandlers.MakeProfilePrivateHandler).Methods("POST")
+	// Notification Routes
+	auth.HandleFunc("/notifications", userHandlers.GetNotificationsHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/notifications/{notificationId}/read", userHandlers.MarkNotificationAsReadHandler).Methods("POST", "OPTIONS")
 
-	// --- Post & Feed Routes ---
+	// Profile Routes
+	auth.HandleFunc("/profile/{userId}", userHandlers.GetProfileHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/profile", userHandlers.UpdateProfileHandler).Methods("PUT", "OPTIONS")
+	auth.HandleFunc("/profile/avatar", userHandlers.UploadAvatarHandler).Methods("POST", "OPTIONS")
+	auth.HandleFunc("/profile/toggle-privacy", userHandlers.ToggleProfilePrivacyHandler).Methods("POST", "OPTIONS")
+
+	// Post & Feed Routes
 	auth.HandleFunc("/posts", postHandlers.CreatePostHandler).Methods("POST")
 	auth.HandleFunc("/posts/feed", postHandlers.GetFeedPostsHandler).Methods("GET")
 	auth.HandleFunc("/posts/{postID}/comment", postHandlers.CreateCommentHandler).Methods("POST")
+	auth.HandleFunc("/posts/{postID}/like", postHandlers.LikePostHandler).Methods("POST")
+	auth.HandleFunc("/comments/{commentID}/like", postHandlers.LikeCommentHandler).Methods("POST")
 
-	// Wrap the router with CORS middleware before returning
-	return CORSMiddleware(router)
+	// Chat Routes
+	auth.HandleFunc("/chats/conversations", chatHandlers.GetConversationsHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/private/{userID}", chatHandlers.GetPrivateConversationHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/group/{groupID}", chatHandlers.GetGroupConversationHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/can-message/{userID}", chatHandlers.CheckCanMessageHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/search-users", chatHandlers.SearchUsersHandler).Methods("GET", "OPTIONS")
+	auth.HandleFunc("/chats/send", chatHandlers.SendMessageHandler).Methods("POST", "OPTIONS")
+
+	// The router with all its middleware and handlers is now complete.
+	return router
 }

@@ -148,3 +148,36 @@ func UpdateUserProfile(user *User) error {
 	)
 	return err
 }
+
+
+// GetAllUsers retrieves all users from the database.
+func GetAllUsers() ([]*User, error) {
+	rows, err := database.DB.Query("SELECT id, first_name, last_name, nickname, email, password_hash, date_of_birth, avatar_path, about_me, is_public, created_at FROM users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		user := &User{}
+		var avatar sql.NullString
+		var nickname sql.NullString
+		var aboutMe sql.NullString
+		err := rows.Scan(
+			&user.ID, &user.FirstName, &user.LastName, &nickname, &user.Email, &user.PasswordHash,
+			&user.DateOfBirth, &avatar, &aboutMe, &user.IsPublic, &user.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		user.AvatarPath = avatar.String
+		user.Nickname = nickname.String
+		user.AboutMe = aboutMe.String
+		users = append(users, user)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
+}

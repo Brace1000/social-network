@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS follow_requests (
     target_id TEXT NOT NULL,      -- The user to be followed
     status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'declined')) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (target_id) REFERENCES users(id) ON DELETE CASCADE
 ); 

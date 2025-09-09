@@ -2,8 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '../../store/AuthContext';
+import { useRouter } from 'next/navigation';
 
 export default function LoginForm({ onSuccess, onError }) {
+  const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -14,26 +18,15 @@ export default function LoginForm({ onSuccess, onError }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:8080/api/v1/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Login failed');
-        if (onError) onError(data.error || 'Login failed');
+      await login(email, password);
+      if (onSuccess) {
+        onSuccess();
       } else {
-        if (onSuccess) {
-          onSuccess();
-        } else {
-          window.location.href = '/home';
-        }
+        router.push('/home');
       }
     } catch (err) {
-      setError('Wrong email or password');
-      if (onError) onError('Wrong email or password');
+      setError(err.message || 'Wrong email or password');
+      if (onError) onError(err.message || 'Wrong email or password');
     } finally {
       setLoading(false);
     }

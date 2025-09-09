@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"social-network/database/models"
 	"social-network/services"
@@ -65,68 +66,6 @@ func (h *UserHandler) SendFollowRequestHandler(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request sent."})
 }
 
-// AcceptFollowRequestHandler handles accepting a follow request.
-func (h *UserHandler) AcceptFollowRequestHandler(w http.ResponseWriter, r *http.Request) {
-	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	vars := mux.Vars(r)
-	requesterID := vars["userId"]
-	if requesterID == "" {
-		http.Error(w, "Invalid requester user", http.StatusBadRequest)
-		return
-	}
-	err := models.AcceptFollowRequest(requesterID, actor.ID)
-	if err != nil {
-		http.Error(w, "Failed to accept follow request", http.StatusInternalServerError)
-		return
-	}
-	// Notify requester that their request was accepted
-	msg := actor.FirstName + " " + actor.LastName + " accepted your follow request."
-	notif := &models.Notification{
-		UserID:  requesterID,
-		ActorID: actor.ID,
-		Type:    "follow_accepted",
-		Message: msg,
-		Read:    false,
-	}
-	_ = models.CreateNotification(notif)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request accepted."})
-}
-
-// DeclineFollowRequestHandler handles declining a follow request.
-func (h *UserHandler) DeclineFollowRequestHandler(w http.ResponseWriter, r *http.Request) {
-	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	vars := mux.Vars(r)
-	requesterID := vars["userId"]
-	if requesterID == "" {
-		http.Error(w, "Invalid requester user", http.StatusBadRequest)
-		return
-	}
-	err := models.DeclineFollowRequest(requesterID, actor.ID)
-	if err != nil {
-		http.Error(w, "Failed to decline follow request", http.StatusInternalServerError)
-		return
-	}
-	// Optionally notify requester of decline
-	msg := actor.FirstName + " " + actor.LastName + " declined your follow request."
-	notif := &models.Notification{
-		UserID:  requesterID,
-		ActorID: actor.ID,
-		Type:    "follow_declined",
-		Message: msg,
-		Read:    false,
-	}
-	_ = models.CreateNotification(notif)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Follow request declined."})
-}
-
 // UnfollowHandler handles unfollowing a user.
 func (h *UserHandler) UnfollowHandler(w http.ResponseWriter, r *http.Request) {
 	actor, ok := r.Context().Value(services.UserContextKey).(*models.User)
@@ -187,10 +126,38 @@ func (h *UserHandler) ListPendingFollowRequestsHandler(w http.ResponseWriter, r 
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	requests, err := models.ListPendingFollowRequests(actor.ID)
+	
+	// Get full follow request objects with all details
+	followRequests, err := models.GetPendingFollowRequestsForUser(actor.ID)
 	if err != nil {
 		http.Error(w, "Failed to list pending follow requests", http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{ "pendingRequests": requests })
-} 
+	
+	// Get requester details for each request
+	var requests []map[string]interface{}
+	for _, followRequest := range followRequests {
+		requester, err := models.GetUserByID(followRequest.RequesterID)
+		if err != nil {
+			log.Printf("Error getting requester info for ID %s: %v", followRequest.RequesterID, err)
+			continue
+		}
+		
+		requests = append(requests, map[string]interface{}{
+			"id": followRequest.ID,
+			"requester": map[string]interface{}{
+				"id":        requester.ID,
+				"firstName": requester.FirstName,
+				"lastName":  requester.LastName,
+				"nickname":  requester.Nickname,
+				"avatarPath": requester.AvatarPath,
+			},
+			"createdAt": followRequest.CreatedAt,
+		})
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(requests) // Return the array directly, not wrapped
+}
+
+ 
