@@ -157,21 +157,26 @@ func (h *UserHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createAndSaveSession(userID string) (string, time.Time, error) {
-	tokenUUID, err := uuid.NewRandom()
-	if err != nil { return "", time.Time{}, err }
-	token := tokenUUID.String()
-	expiry := time.Now().Add(7 * 24 * time.Hour)
+    tokenUUID, err := uuid.NewRandom()
+    if err != nil {
+        return "", time.Time{}, err
+    }
+    token := tokenUUID.String()
+    expiry := time.Now().Add(7 * 24 * time.Hour) // keep as time.Time for cookies
 
-	log.Printf("createAndSaveSession: Attempting to INSERT token '%s' for user '%s' into DB.", token, userID)
-	query := "INSERT INTO sessions (token, user_id, expiry) VALUES (?, ?, ?)"
-	_, err = database.DB.Exec(query, token, userID, expiry)
-	if err != nil {
-		log.Printf("createAndSaveSession: FAILED to insert session into DB. Error: %v", err)
-		return "", time.Time{}, err
-	}
+    // Format it for SQLite (so it matches CURRENT_TIMESTAMP)
+    expiryStr := expiry.UTC().Format("2006-01-02 15:04:05")
 
-	log.Println("createAndSaveSession: SUCCESS inserting session into DB.")
-	return token, expiry, nil
+    log.Printf("createAndSaveSession: Attempting to INSERT token '%s' for user '%s' into DB.", token, userID)
+    query := "INSERT INTO sessions (token, user_id, expiry) VALUES (?, ?, ?)"
+    _, err = database.DB.Exec(query, token, userID, expiryStr)
+    if err != nil {
+        log.Printf("createAndSaveSession: FAILED to insert session into DB. Error: %v", err)
+        return "", time.Time{}, err
+    }
+
+    log.Println("createAndSaveSession: SUCCESS inserting session into DB.")
+    return token, expiry, nil // return time.Time for caller
 }
 
 func (h *UserHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
