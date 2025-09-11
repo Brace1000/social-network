@@ -191,3 +191,246 @@ a {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+/* PostForm Container Styles */
+.post-form-container {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.post-form-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Textarea Styles */
+.post-form-container textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 20px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: #fafbfc;
+  box-sizing: border-box;
+}
+
+.post-form-container textarea:focus {
+  outline: none;
+  border-color: #b74115;
+  box-shadow: 0 0 0 3px rgba(183, 65, 21, 0.1);
+  background: #ffffff;
+}
+
+.post-form-container textarea::placeholder {
+  color: #9ca3af;
+  font-size: 17px;
+}
+
+/* File Input Container */
+.file-input-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-input-container label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f3f4f6;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  color: #374151;
+  justify-content: center;
+  text-align: center;
+}
+
+.file-input-container label:hover {
+  background: #e5e7eb;
+  border-color: #b74115;
+  color: #b74115;
+}
+
+.file-input-container .upload-icon {
+  font-size: 18px;
+  filter: grayscale(0.3);
+}
+
+.file-input-container input[type="file"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.file-input-container p {
+  margin: 0;
+  padding: 8px 12px;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  color: #1e40af;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Privacy Select Container */
+.privacy-select-container {
+  display: flex;
+  gap: 24px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.privacy-select-container label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #374151;
+  transition: color 0.2s ease;
+  user-select: none;
+}
+
+.privacy-select-container label:hover {
+  color: #b74115;
+}
+
+.privacy-select-container input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #b74115;
+  cursor: pointer;
+}
+
+/* Submit Button */
+.post-form-container button[type="submit"] {
+  background: #b74115;
+  color: white;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+  align-self: flex-end;
+  min-width: 120px;
+}
+
+.post-form-container button[type="submit"]:hover {
+  background: #a03a12;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(183, 65, 21, 0.3);
+}
+
+.post-form-container button[type="submit"]:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(183, 65, 21, 0.3);
+}
+
+.post-form-container button[type="submit"]:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .post-form-container {
+    background: var(--background, #1a1a1a);
+    border-color: #374151;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .post-form-container textarea {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: var(--foreground, #ededed);
+  }
+  
+  .post-form-container textarea:focus {
+    background: #374151;
+  }
+  
+  .file-input-container label {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: var(--foreground, #ededed);
+  }
+  
+  .file-input-container label:hover {
+    background: #374151;
+  }
+  
+  .privacy-select-container {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .privacy-select-container label {
+    color: var(--foreground, #ededed);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .post-form-container {
+    padding: 16px;
+    margin: 0 16px 24px 16px;
+    border-radius: 8px;
+  }
+  
+  .privacy-select-container {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .post-form-container button[type="submit"] {
+    align-self: stretch;
+    padding: 16px 32px;
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .post-form-container {
+    padding: 12px;
+    margin: 0 8px 16px 8px;
+  }
+  
+  .post-form-container textarea {
+    padding: 12px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  .file-input-container label {
+    padding: 16px 12px;
+    font-size: 16px;
+  }
+}
